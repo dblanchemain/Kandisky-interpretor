@@ -1,0 +1,35 @@
+{
+  "name": "kandisky-interpretor",
+  "version": "1.0.0",
+  "description": "Kandisky Interpretor – lecteur de partitions OpenWork",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build-linux": "electron-builder --linux",
+    "build-mac": "electron-builder --mac",
+    "build-win": "electron-builder --win"
+  },
+  "build": {
+    "appId": "com.kandiskyscore.interpretor",
+    "productName": "Kandisky Interpretor",
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "score.css"
+    ],
+    "linux": {
+      "target": "AppImage"
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "win": {
+      "target": "nsis"
+    }
+  },
+  "devDependencies": {
+    "electron": "^30.0.0",
+    "electron-builder": "^24.0.0"
+  }
+}
