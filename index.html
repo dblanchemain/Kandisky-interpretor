@@ -681,7 +681,7 @@ let owTempoVisible = false;
 let owPointMode    = 'tempo';  // 'tempo' | 'gain'
 let owGridVisible  = false;
 let owDragMoved    = false;  // true si le dernier mousedown a produit un déplacement réel
-let owNuanceInsts  = [];   // [{id, nom, posX, posY, gainPtId}]  — section active
+let owNuanceInsts  = [];   // [{id, nom, posX, posY, gainPtId, grpId}]  — section active
 let owNextNuInstId = 1;
 /* Données par section — snapshots sauvegardés lors des changements de section */
 let owTempoBySection       = {};  // secId → {points:[{id,X,Y}], nb:N}
@@ -884,12 +884,14 @@ function owParseData(txt, label) {
     doc.querySelectorAll('interpretor > nuanceinst').forEach(el => {
       const id    = parseInt(el.getAttribute('id')) || owNextNuInstId;
       const secid = parseInt(el.getAttribute('secid')) || firstSecId;
+      const rawGrpId = parseInt(el.getAttribute('grpId'));
       const inst  = {
         id,
         nom:      el.getAttribute('nom') || '',
         posX:     parseFloat(el.getAttribute('posX')) || 0,
         posY:     parseFloat(el.getAttribute('posY')) || 0,
-        gainPtId: el.getAttribute('gainPtId') || ''
+        gainPtId: el.getAttribute('gainPtId') || '',
+        grpId:    isNaN(rawGrpId) ? null : rawGrpId
       };
       if (!owNuanceInstsBySection[secid]) owNuanceInstsBySection[secid] = [];
       owNuanceInstsBySection[secid].push(inst);
@@ -948,7 +950,7 @@ function owSerialise() {
     if (gd && gd.points.length)
       xml += `    <seccurves secid="${sec.id}" type="gain" value="${gd.points.map(p=>p.X+':'+p.Y+':'+p.id).join(';')}"/>\n`;
     ni.forEach(inst => {
-      xml += `    <nuanceinst secid="${sec.id}" id="${inst.id}" nom="${x(inst.nom)}" posX="${inst.posX}" posY="${inst.posY}" gainPtId="${x(inst.gainPtId)}"/>\n`;
+      xml += `    <nuanceinst secid="${sec.id}" id="${inst.id}" nom="${x(inst.nom)}" posX="${inst.posX}" posY="${inst.posY}" gainPtId="${x(inst.gainPtId)}" grpId="${inst.grpId ?? ''}"/>\n`;
     });
   });
   xml += `  </interpretor>\n</openwork>\n`;
@@ -1280,7 +1282,8 @@ function owApplyNuance(nom) {
     nom,
     posX: grp.posX,
     posY: grp.posY + grp.h + 4,
-    gainPtId
+    gainPtId,
+    grpId: grp.id
   };
   owNuanceInsts.push(inst);
   owMakeNuanceInstEl(inst);
@@ -1762,11 +1765,29 @@ function owDragElement(elmnt, grpData, startEvt) {
     p1 = p3 - e.clientX; p2 = p4 - e.clientY;
     p3 = e.clientX;       p4 = e.clientY;
     if (!dragged) return;
+    const prevX = grpData.posX, prevY = grpData.posY;
     grpData.posX = elmnt.offsetLeft - p1;
     grpData.posY = Math.max(0, elmnt.offsetTop - p2);
     owApplyPosConstraints(grpData);
+    const dx = grpData.posX - prevX, dy = grpData.posY - prevY;
     elmnt.style.left = grpData.posX + 'px';
     elmnt.style.top  = grpData.posY + 'px';
+    /* Déplacer les nuances liées à ce groupe */
+    let gainMoved = false;
+    owNuanceInsts.filter(i => i.grpId === grpData.id).forEach(inst => {
+      inst.posX += dx; inst.posY += dy;
+      const gp = owGainPoints.find(p => p.id === inst.gainPtId);
+      if (gp) {
+        gp.X = inst.posX;
+        owGainPoints.sort((a, b) => a.X - b.X);
+        const gpEl = document.getElementById(gp.id);
+        if (gpEl) gpEl.style.left = (gp.X - 3) + 'px';
+        gainMoved = true;
+      }
+      const nuEl = document.getElementById('nuinst' + inst.id);
+      if (nuEl) { nuEl.style.left = inst.posX + 'px'; nuEl.style.top = inst.posY + 'px'; }
+    });
+    if (gainMoved) owDrawGain();
   }
   function stop() {
     document.onmousemove = null;
