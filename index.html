@@ -734,6 +734,9 @@ document.addEventListener('click', function() {
     owOpenMenu = null;
   }
 });
+function owCloseAllPopups() {
+  document.querySelectorAll('.ow-popup').forEach(p => p.style.display = 'none');
+}
 function owCloseMenus() {
   if (owOpenMenu) {
     document.getElementById(owOpenMenu).classList.remove('open');
@@ -752,6 +755,7 @@ function owNouveau() {
   owActiveGrp = null; owActiveSec = null; owFilePath = null; owModified = false;
   owTempoBySection = {}; owGainBySection = {}; owNuanceInstsBySection = {};
   owTempoPoints = []; owGainPoints = []; owNbTempo = 1; owNbGain = 1;
+  owCloseAllPopups();
   document.getElementById('owFileLabel').textContent = 'Sans titre';
   owRebuildTempoPoints();
   owRenderAll();
@@ -906,6 +910,7 @@ function owParseData(txt, label) {
     owModified  = false;
     owActiveSec = owSections.length ? owSections[0].id : null;
     owLoadSectionCurves(owActiveSec);
+    owCloseAllPopups();
     if (label) document.getElementById('owFileLabel').textContent = label;
     owRenderAll();
     owBuildNuancesTable();
