@@ -679,8 +679,12 @@ let owNbTempo = 1, owNbGain = 1;
 let owTempoVisible = false;
 let owPointMode    = 'tempo';  // 'tempo' | 'gain'
 let owGridVisible  = false;
-let owNuanceInsts  = [];   // [{id, nom, posX, posY, gainPtId}]
+let owNuanceInsts  = [];   // [{id, nom, posX, posY, gainPtId}]  — section active
 let owNextNuInstId = 1;
+/* Données par section — snapshots sauvegardés lors des changements de section */
+let owTempoBySection       = {};  // secId → {points:[{id,X,Y}], nb:N}
+let owGainBySection        = {};  // secId → {points:[{id,X,Y}], nb:N}
+let owNuanceInstsBySection = {};  // secId → [{id,nom,posX,posY,gainPtId}]
 
 // ═══════════════════════════════════════════════
 //  GLYPHES DE NUANCES (extraits de kandiskyScore)
@@ -741,8 +745,11 @@ function owNouveau() {
   if (owModified && !confirm('Nouveau projet ? Les modifications non sauvegardées seront perdues.')) return;
   owSections = []; owGroups = []; owNuanceInsts = [];
   owNextSecId = 1; owNextGrpId = 1; owNextNuInstId = 1;
-  owActiveGrp = null; owFilePath = null; owModified = false;
+  owActiveGrp = null; owActiveSec = null; owFilePath = null; owModified = false;
+  owTempoBySection = {}; owGainBySection = {}; owNuanceInstsBySection = {};
+  owTempoPoints = []; owGainPoints = []; owNbTempo = 1; owNbGain = 1;
   document.getElementById('owFileLabel').textContent = 'Sans titre';
+  owRebuildTempoPoints();
   owRenderAll();
 }
 
@@ -823,33 +830,67 @@ function owParseData(txt, label) {
     if (nuanceEls.length) {
       owNuances = [...nuanceEls].map(el => ({ nom: el.getAttribute('nom'), val: n(el.getAttribute('val'), 50) }));
     }
-    /* points tempo / gain */
-    owTempoPoints = []; owGainPoints = []; owNbTempo = 1; owNbGain = 1;
-    const parsePts = (selector, arr, prefix, counter) => {
-      const el  = doc.querySelector(selector);
-      const val = el ? el.getAttribute('value') : '';
-      if (val) val.split(';').filter(s => s).forEach(seg => {
-        const [xs, ys, id] = seg.split(':');
+    /* Réinitialiser les données par section */
+    owTempoBySection = {}; owGainBySection = {}; owNuanceInstsBySection = {};
+    owNbTempo = 1; owNbGain = 1; owNextNuInstId = 1;
+    /* Initialiser les dicts pour toutes les sections */
+    owSections.forEach(sec => {
+      owTempoBySection[sec.id]       = { points: [], nb: 1 };
+      owGainBySection[sec.id]        = { points: [], nb: 1 };
+      owNuanceInstsBySection[sec.id] = [];
+    });
+    /* Lire les courbes par section (nouveau format <seccurves>) */
+    doc.querySelectorAll('interpretor > seccurves').forEach(el => {
+      const secId = parseInt(el.getAttribute('secid'));
+      const type  = el.getAttribute('type');
+      const val   = el.getAttribute('value') || '';
+      if (!owTempoBySection[secId]) owTempoBySection[secId] = { points: [], nb: 1 };
+      if (!owGainBySection[secId])  owGainBySection[secId]  = { points: [], nb: 1 };
+      const pts = [];
+      let ctr = 1;
+      val.split(';').filter(s => s).forEach(seg => {
+        const [xs, ys, pid] = seg.split(':');
         const X = parseFloat(xs), Y = parseFloat(ys);
-        if (!isNaN(X) && !isNaN(Y)) arr.push({id: id || (prefix + counter++), X, Y});
+        if (!isNaN(X) && !isNaN(Y)) { pts.push({id: pid || ((type==='tempo'?'owtmp':'owgna') + ctr), X, Y}); ctr++; }
       });
-      arr.sort((a, b) => a.X - b.X);
-      return counter;
+      pts.sort((a, b) => a.X - b.X);
+      if (type === 'tempo') { owTempoBySection[secId].points = pts; owTempoBySection[secId].nb = Math.max(owNbTempo, ctr); owNbTempo = Math.max(owNbTempo, ctr); }
+      else if (type === 'gain') { owGainBySection[secId].points = pts; owGainBySection[secId].nb = Math.max(owNbGain, ctr); owNbGain = Math.max(owNbGain, ctr); }
+    });
+    /* Rétrocompatibilité : ancien format <tempopoints>/<gainpoints> (sans secid) → première section */
+    const firstSecId = owSections.length ? owSections[0].id : null;
+    const parsePtsLegacy = (selector, secId, type) => {
+      const el = doc.querySelector(selector);
+      const val = el ? el.getAttribute('value') : '';
+      if (!val || !secId) return;
+      const pts = [];
+      let ctr = 1;
+      val.split(';').filter(s => s).forEach(seg => {
+        const [xs, ys, pid] = seg.split(':');
+        const X = parseFloat(xs), Y = parseFloat(ys);
+        if (!isNaN(X) && !isNaN(Y)) { pts.push({id: pid || ((type==='tempo'?'owtmp':'owgna') + ctr), X, Y}); ctr++; }
+      });
+      pts.sort((a, b) => a.X - b.X);
+      if (type === 'tempo') { owTempoBySection[secId].points = pts; owNbTempo = Math.max(owNbTempo, ctr); }
+      else                  { owGainBySection[secId].points  = pts; owNbGain  = Math.max(owNbGain,  ctr); }
     };
-    owNbTempo = parsePts('interpretor > tempopoints', owTempoPoints, 'owtmp', owNbTempo);
-    owNbGain  = parsePts('interpretor > gainpoints',  owGainPoints,  'owgna', owNbGain);
-
-    /* instances de nuances */
-    owNuanceInsts = [];
+    if (!doc.querySelector('interpretor > seccurves') && firstSecId) {
+      parsePtsLegacy('interpretor > tempopoints', firstSecId, 'tempo');
+      parsePtsLegacy('interpretor > gainpoints',  firstSecId, 'gain');
+    }
+    /* Instances de nuances */
     doc.querySelectorAll('interpretor > nuanceinst').forEach(el => {
-      const id = parseInt(el.getAttribute('id')) || owNextNuInstId;
-      owNuanceInsts.push({
+      const id    = parseInt(el.getAttribute('id')) || owNextNuInstId;
+      const secid = parseInt(el.getAttribute('secid')) || firstSecId;
+      const inst  = {
         id,
         nom:      el.getAttribute('nom') || '',
         posX:     parseFloat(el.getAttribute('posX')) || 0,
         posY:     parseFloat(el.getAttribute('posY')) || 0,
         gainPtId: el.getAttribute('gainPtId') || ''
-      });
+      };
+      if (!owNuanceInstsBySection[secid]) owNuanceInstsBySection[secid] = [];
+      owNuanceInstsBySection[secid].push(inst);
       if (id >= owNextNuInstId) owNextNuInstId = id + 1;
     });
 
@@ -858,6 +899,7 @@ function owParseData(txt, label) {
     owActiveGrp = null;
     owModified  = false;
     owActiveSec = owSections.length ? owSections[0].id : null;
+    owLoadSectionCurves(owActiveSec);
     if (label) document.getElementById('owFileLabel').textContent = label;
     owRenderAll();
     owBuildNuancesTable();
@@ -892,12 +934,20 @@ function owSerialise() {
   });
   xml += `  </partition>\n  <interpretor>\n`;
   owNuances.forEach(nu => { xml += `    <nuance nom="${x(nu.nom)}" val="${nu.val}"/>\n`; });
-  if (owTempoPoints.length)
-    xml += `    <tempopoints value="${owTempoPoints.map(p=>p.X+':'+p.Y+':'+p.id).join(';')}"/>\n`;
-  if (owGainPoints.length)
-    xml += `    <gainpoints value="${owGainPoints.map(p=>p.X+':'+p.Y+':'+p.id).join(';')}"/>\n`;
-  owNuanceInsts.forEach(inst => {
-    xml += `    <nuanceinst id="${inst.id}" nom="${x(inst.nom)}" posX="${inst.posX}" posY="${inst.posY}" gainPtId="${x(inst.gainPtId)}"/>\n`;
+  /* Sauvegarder la section active avant sérialisation */
+  owSaveSectionCurves();
+  /* Courbes tempo/gain et nuances par section */
+  sorted.forEach(sec => {
+    const td = owTempoBySection[sec.id];
+    const gd = owGainBySection[sec.id];
+    const ni = owNuanceInstsBySection[sec.id] || [];
+    if (td && td.points.length)
+      xml += `    <seccurves secid="${sec.id}" type="tempo" value="${td.points.map(p=>p.X+':'+p.Y+':'+p.id).join(';')}"/>\n`;
+    if (gd && gd.points.length)
+      xml += `    <seccurves secid="${sec.id}" type="gain" value="${gd.points.map(p=>p.X+':'+p.Y+':'+p.id).join(';')}"/>\n`;
+    ni.forEach(inst => {
+      xml += `    <nuanceinst secid="${sec.id}" id="${inst.id}" nom="${x(inst.nom)}" posX="${inst.posX}" posY="${inst.posY}" gainPtId="${x(inst.gainPtId)}"/>\n`;
+    });
   });
   xml += `  </interpretor>\n</openwork>\n`;
   return xml;
@@ -966,7 +1016,16 @@ function owAjouterSection() {
     posY = sorted.at(-1).posY + 100;
     if (posY > 2800) posY = 2800;
   }
-  owSections.push({id: owNextSecId++, name, posY, color:'#4a90d9'});
+  const newId = owNextSecId++;
+  owSections.push({id: newId, name, posY, color:'#4a90d9'});
+  owTempoBySection[newId]       = { points: [], nb: 1 };
+  owGainBySection[newId]        = { points: [], nb: 1 };
+  owNuanceInstsBySection[newId] = [];
+  if (owActiveSec === null) {
+    owActiveSec = newId;
+    owLoadSectionCurves(newId);
+    owRebuildTempoPoints();
+  }
   owModified = true;
   owRenderAll();
 }
@@ -981,9 +1040,17 @@ function owSupprimerSection() {
   const id = parseInt(saisie);
   const idx = owSections.findIndex(s => s.id === id);
   if (idx === -1) { alert('Section non trouvée.'); return; }
-  owGroups    = owGroups.filter(g => g.sectionId !== id);
+  owGroups = owGroups.filter(g => g.sectionId !== id);
   owSections.splice(idx, 1);
+  delete owTempoBySection[id];
+  delete owGainBySection[id];
+  delete owNuanceInstsBySection[id];
   if (!owGroups.find(g => g.id === owActiveGrp)) owActiveGrp = null;
+  if (owActiveSec === id) {
+    owActiveSec = owSections.length ? owSections[0].id : null;
+    owLoadSectionCurves(owActiveSec);
+    owRebuildTempoPoints();
+  }
   owModified = true;
   owRenderAll();
 }
@@ -1014,18 +1081,10 @@ function owDoPermuter() {
   const s2 = owSections.find(s => s.id === id2);
   if (!s1 || !s2) return;
   const dy = s2.posY - s1.posY;
-  /* Déplacer groupes ET instances de nuances avec leur section, sectionId inchangé */
+  /* Déplacer les groupes avec leur section (sectionId inchangé) */
   owGroups.forEach(g => {
     if (g.sectionId === id1) g.posY += dy;
     else if (g.sectionId === id2) g.posY -= dy;
-  });
-  owNuanceInsts.forEach(inst => {
-    const gp = owGainPoints.find(p => p.id === inst.gainPtId);
-    if (!gp) return;
-    const grp = owGroups.find(g => Math.round(g.posX) === gp.X);
-    if (!grp) return;
-    if (grp.sectionId === id1) inst.posY += dy;
-    else if (grp.sectionId === id2) inst.posY -= dy;
   });
   const tmp = s1.posY;
   s1.posY = s2.posY;
@@ -1526,8 +1585,11 @@ function toRoman(n) {
 let owActiveSec = null;
 
 function owSelectSection(secId) {
+  owSaveSectionCurves();
   owActiveSec = secId;
   owActiveGrp = null;
+  owLoadSectionCurves(secId);
+  owRebuildTempoPoints();
   owRenderAll();
 }
 
@@ -1834,6 +1896,25 @@ function owInsertGainPoint(x, y) {
   owDrawGain();
   owModified = true;
   return id;
+}
+
+function owSaveSectionCurves() {
+  if (!owActiveSec) return;
+  owTempoBySection[owActiveSec]       = { points: owTempoPoints.map(p => ({...p})), nb: owNbTempo };
+  owGainBySection[owActiveSec]        = { points: owGainPoints.map(p => ({...p})),  nb: owNbGain  };
+  owNuanceInstsBySection[owActiveSec] = owNuanceInsts.map(i => ({...i}));
+}
+
+function owLoadSectionCurves(secId) {
+  const td = secId != null ? owTempoBySection[secId] : null;
+  const gd = secId != null ? owGainBySection[secId]  : null;
+  owTempoPoints = td ? td.points.map(p => ({...p})) : [];
+  owNbTempo     = td ? td.nb : 1;
+  owGainPoints  = gd ? gd.points.map(p => ({...p})) : [];
+  owNbGain      = gd ? gd.nb : 1;
+  owNuanceInsts = (secId != null && owNuanceInstsBySection[secId])
+    ? owNuanceInstsBySection[secId].map(i => ({...i}))
+    : [];
 }
 
 function owInitDefaultPoints() {
