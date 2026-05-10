@@ -4,32 +4,26 @@
   "description": "Kandisky Interpretor – lecteur de partitions OpenWork",
   "main": "main.js",
   "scripts": {
-    "start": "electron .",
-    "build-linux": "electron-builder --linux",
-    "build-mac": "electron-builder --mac",
-    "build-win": "electron-builder --win"
+    "start": "electron-forge start",
+    "package": "electron-forge package",
+    "make": "electron-forge make"
   },
-  "build": {
-    "appId": "com.kandiskyscore.interpretor",
-    "productName": "Kandisky Interpretor",
-    "files": [
-      "main.js",
-      "preload.js",
-      "index.html",
-      "score.css"
-    ],
-    "linux": {
-      "target": "AppImage"
-    },
-    "mac": {
-      "target": "dmg"
-    },
-    "win": {
-      "target": "nsis"
-    }
-  },
+  "author": "D.Blanchemain",
+  "license": "GPL-3.0-or-later",
   "devDependencies": {
-    "electron": "^30.0.0",
-    "electron-builder": "^24.0.0"
+    "@electron-forge/cli": "^7.11.1",
+    "@electron-forge/maker-deb": "^7.11.1",
+    "@electron-forge/maker-dmg": "^7.11.1",
+    "@electron-forge/maker-rpm": "^7.11.1",
+    "@electron-forge/maker-squirrel": "^7.11.1",
+    "@electron-forge/maker-zip": "^7.11.1",
+    "@electron-forge/plugin-auto-unpack-natives": "^7.11.1",
+    "electron": "^25.4.0"
+  },
+  "dependencies": {
+    "electron-squirrel-startup": "^1.0.0"
+  },
+  "config": {
+    "forge": "./forge.config.js"
   }
 }
