@@ -194,12 +194,17 @@
     }
     #owTempoBar svg { display: block; }
     .ow-tp-btn {
-      margin-left: 10px;
-      font-size: 0.75em;
-      padding: 1px 7px;
+      margin-left: 8px;
+      font-size: 0.78em;
+      padding: 1px 8px;
       cursor: pointer;
+      background: #4a4f5c;
+      color: #e8e8e8;
+      border: 1px solid #666;
+      border-radius: 3px;
     }
-    .ow-tp-btn.actif { font-weight: bold; outline: 2px solid #555; }
+    .ow-tp-btn:hover { background: #5a6080; }
+    .ow-tp-btn.actif { border-color: #aaa; }
 
     /* ── Sections dans l'espace de travail ── */
     .ow-section-line {
@@ -421,6 +426,8 @@
     </ul>
   </div>
 
+  <button class="ow-tp-btn" id="owBtnTempoBar" onclick="owToggleTempoBar()" title="Afficher/masquer le bandeau Tempo/Gain">Tempo/Gain</button>
+  <button class="ow-tp-btn actif" id="owBtnMode" onclick="owToggleMode()" style="color:green;" title="Mode d'ajout de point">Tempo</button>
   <span id="owFileLabel">Sans titre</span>
 </div>
 
@@ -450,8 +457,6 @@
     <span id="owGrpInfo" style="margin-left:20px;font-size:0.85em;color:#555;"></span>
     <span id="owZoomLabel">Zoom : <b id="owZoomVal">100</b> %</span>
     <span style="margin-left:40px;">Contexte</span> : <span id="owRate" style="margin-left:6px;">48000</span>
-    <button class="ow-tp-btn" id="owBtnTempoBar" onclick="owToggleTempoBar()" title="Afficher/masquer le bandeau Tempo/Gain">Tempo/Gain</button>
-    <button class="ow-tp-btn actif" id="owBtnMode" onclick="owToggleMode()" title="Mode d'ajout de point">Tempo</button>
   </div>
 
   <div id="work" style="position:absolute;top:38px;left:0;width:12960px;height:788px;overflow-x:scroll;overflow-y:hidden;border:0;">
@@ -1431,8 +1436,22 @@ function owInsertGainPoint(x, y) {
   owModified = true;
 }
 
+function owInitDefaultPoints() {
+  /* tempo 60 BPM : Y = (240-60)*0.4167 ≈ 75 */
+  if (!owTempoPoints.length) {
+    owTempoPoints.push({id:'owtmp0', X:0, Y:75});
+    owNbTempo = Math.max(owNbTempo, 1);
+  }
+  /* gain 1.0 : Y = 100 - 1.0/0.05 = 80 */
+  if (!owGainPoints.length) {
+    owGainPoints.push({id:'owgna0', X:0, Y:80});
+    owNbGain = Math.max(owNbGain, 1);
+  }
+}
+
 function owRebuildTempoPoints() {
   document.querySelectorAll('[id^="owtmp"],[id^="owgna"]').forEach(el => el.remove());
+  owInitDefaultPoints();
   owTempoPoints.forEach(p => owCreatePointEl(p.id, p.X, p.Y, 'green', owTempoPoints, owDrawTempo, owTempoPointTitle));
   owGainPoints.forEach(p  => owCreatePointEl(p.id, p.X, p.Y, '#c33',  owGainPoints,  owDrawGain,  owGainPointTitle));
   owDrawTempo();
@@ -1703,6 +1722,7 @@ document.getElementById('space').addEventListener('mouseleave', owResetCompteur)
 owBuildNuancesTable();
 owResetCompteur();
 owCreateReglette();
+owRebuildTempoPoints();
 </script>
 </body>
 </html>
