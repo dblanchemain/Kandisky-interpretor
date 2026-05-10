@@ -679,6 +679,7 @@ let owNbTempo = 1, owNbGain = 1;
 let owTempoVisible = false;
 let owPointMode    = 'tempo';  // 'tempo' | 'gain'
 let owGridVisible  = false;
+let owDragMoved    = false;  // true si le dernier mousedown a produit un déplacement réel
 let owNuanceInsts  = [];   // [{id, nom, posX, posY, gainPtId}]  — section active
 let owNextNuInstId = 1;
 /* Données par section — snapshots sauvegardés lors des changements de section */
@@ -1507,11 +1508,9 @@ function owRenderGroups() {
     lbl.className = 'ow-grp-lbl';
     lbl.textContent = grp.name;
     lbl.style.cursor = 'pointer';
-    lbl.addEventListener('mousedown', e => e.stopPropagation());
     lbl.addEventListener('click', e => {
       e.stopPropagation();
-      owSelectGrp(grp.id);
-      owParamsGroupe();
+      if (!owDragMoved) owParamsGroupe();
     });
     centerDiv.appendChild(lbl);
     div.appendChild(centerDiv);
@@ -1551,6 +1550,7 @@ function owRenderGroups() {
 
     div.addEventListener('mousedown', function(e) {
       e.stopPropagation();
+      owDragMoved = false;
       owSelectGrp(grp.id);
       owDragElement(div, grp, e);
     });
@@ -1745,8 +1745,10 @@ function owDragElement(elmnt, grpData, startEvt) {
 
   function drag(e) {
     e.preventDefault();
-    if (!dragged && (Math.abs(e.clientX - sx) > 4 || Math.abs(e.clientY - sy) > 4))
+    if (!dragged && (Math.abs(e.clientX - sx) > 4 || Math.abs(e.clientY - sy) > 4)) {
       dragged = true;
+      owDragMoved = true;
+    }
     p1 = p3 - e.clientX; p2 = p4 - e.clientY;
     p3 = e.clientX;       p4 = e.clientY;
     if (!dragged) return;
