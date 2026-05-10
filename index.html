@@ -200,23 +200,22 @@
       overflow-y: auto;
       max-height: 240px;
     }
-    .ow-nu-btn {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 3px 6px;
-      margin: 2px 0;
+    #defpaletteNuances {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .ow-nu-cell {
+      width: 33%;
+      text-align: center;
+      padding: 3px 2px;
       cursor: pointer;
       border: 1px solid #c0c8d8;
-      border-radius: 3px;
       background: #eef2f8;
     }
-    .ow-nu-btn:hover { background: #d0ddf0; border-color: #4a90d9; }
-    .ow-nu-btn.actif { background: #4a90d9; color: #fff; border-color: #2a70b9; font-weight: bold; }
-    .ow-nu-val { font-size: 0.78em; color: #888; }
-    .ow-nu-btn.actif .ow-nu-val { color: #cde; }
-    .ow-nu-btn svg { overflow: visible; }
-    .ow-nu-btn.actif svg g { fill: #fff; stroke: #fff; }
+    .ow-nu-cell:hover { background: #d0ddf0; border-color: #4a90d9; }
+    .ow-nu-cell.actif { background: #4a90d9; color: #fff; border-color: #2a70b9; }
+    .ow-nu-cell svg { overflow: visible; }
+    .ow-nu-cell.actif svg g { fill: #fff; stroke: #fff; }
     /* Éléments de nuances dans l'espace de travail */
     .ow-nuinst {
       position: absolute;
@@ -1248,21 +1247,33 @@ function owBuildNuancePalette() {
   pal.innerHTML = '';
   const activeGrp = owGroups.find(g => g.id === owActiveGrp);
   const current   = activeGrp ? activeGrp.nuance : '';
+  const COLS = 3;
+  const tbl = document.createElement('table');
+  tbl.id = 'defpaletteNuances';
+  tbl.border = '0';
+  const tbody = document.createElement('tbody');
+  let row, col = 0;
   owNuances.forEach(nu => {
-    const btn = document.createElement('div');
-    btn.className = 'ow-nu-btn' + (nu.nom === current ? ' actif' : '');
+    if (col % COLS === 0) { row = document.createElement('tr'); tbody.appendChild(row); }
+    const td = document.createElement('td');
+    td.className = 'ow-nu-cell' + (nu.nom === current ? ' actif' : '');
+    td.title = nu.nom + ' — intensité ' + nu.val;
     const glyph = OW_NUANCE_GLYPHS[nu.nom.toLowerCase()];
     if (glyph) {
-      btn.innerHTML =
-        '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="22" viewBox="0 0 40 14" overflow="visible" style="display:block;margin:0 auto">' +
+      td.innerHTML =
+        '<svg xmlns="http://www.w3.org/2000/svg" width="52" height="18" viewBox="0 0 40 14" overflow="visible" style="display:block;margin:0 auto">' +
         '<g fill="currentColor" stroke="currentColor">' + glyph + '</g></svg>';
     } else {
-      btn.innerHTML = '<span style="font-style:italic">' + nu.nom + '</span><span class="ow-nu-val">' + nu.val + '</span>';
+      td.innerHTML = '<span style="font-style:italic;font-size:0.8em">' + nu.nom + '</span>';
     }
-    btn.title = nu.nom + ' — intensité ' + nu.val;
-    btn.addEventListener('click', () => owApplyNuance(nu.nom));
-    pal.appendChild(btn);
+    td.addEventListener('click', () => owApplyNuance(nu.nom));
+    row.appendChild(td);
+    col++;
   });
+  /* Compléter la dernière ligne */
+  while (col % COLS !== 0) { row.appendChild(document.createElement('td')); col++; }
+  tbl.appendChild(tbody);
+  pal.appendChild(tbl);
 }
 
 function owApplyNuance(nom) {
