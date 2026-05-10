@@ -469,7 +469,7 @@
   <div class="mnu-item" id="mnuEdition">Édition
     <ul class="mnu-drop">
       <li onclick="owPermuter()">Permuter deux sections</li>
-      <li onclick="owParamsGroupe()">Paramètres</li>
+      <li onclick="owOuvrirParamsGroupe()">Paramètres</li>
     </ul>
   </div>
 
@@ -1513,7 +1513,7 @@ function owRenderGroups() {
       e.preventDefault();
       e.stopPropagation();
       owSelectGrp(grp.id);
-      owParamsGroupe();
+      owShowGrpInfo(grp);
     });
     centerDiv.appendChild(lbl);
     div.appendChild(centerDiv);
@@ -1632,6 +1632,13 @@ function owSelectGrp(id) {
   const grp = owGroups.find(g => g.id === id);
   if (grp && document.getElementById('grpInfoPopup').style.display !== 'none') owShowGrpInfo(grp);
   owBuildNuancePalette();
+}
+
+function owOuvrirParamsGroupe() {
+  owCloseMenus();
+  if (owActiveGrp === null) { alert('Sélectionnez d\'abord un groupe.'); return; }
+  const grp = owGroups.find(g => g.id === owActiveGrp);
+  if (grp) owShowGrpInfo(grp);
 }
 
 function owShowGrpInfo(grp) {
