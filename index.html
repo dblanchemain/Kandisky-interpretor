@@ -711,6 +711,9 @@ const OW_NUANCE_GLYPHS = {
 // ═══════════════════════════════════════════════
 let owOpenMenu = null;
 
+document.querySelectorAll('.mnu-drop li').forEach(li => {
+  li.addEventListener('click', e => e.stopPropagation());
+});
 document.querySelectorAll('.mnu-item').forEach(item => {
   item.addEventListener('click', function(e) {
     e.stopPropagation();
