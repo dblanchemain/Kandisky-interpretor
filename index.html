@@ -156,9 +156,32 @@
       padding: 3px 4px 3px 6px;
       border-left: 3px solid #4a90d9;
       margin: 2px 0;
-      cursor: default;
+      cursor: pointer;
       color: #222;
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
     }
+    .ow-sec-roman {
+      font-weight: bold;
+      font-size: 1em;
+      color: #2a5fa8;
+      min-width: 28px;
+      text-align: right;
+      flex-shrink: 0;
+    }
+    .ow-sec-name {
+      font-size: 0.85em;
+      color: #444;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .ow-sec-item.actif {
+      background: #d0e4ff;
+      border-left-width: 4px;
+    }
+    .ow-sec-item:hover:not(.actif) { background: #edf3ff; }
 
     /* ── Sections dans l'espace de travail ── */
     .ow-section-line {
@@ -545,6 +568,7 @@ function owParseData(txt, label) {
     owNextGrpId = grpId;
     owActiveGrp = null;
     owModified  = false;
+    owActiveSec = owSections.length ? [...owSections].sort((a,b) => a.posY - b.posY)[0].id : null;
     if (label) document.getElementById('owFileLabel').textContent = label;
     owRenderAll();
     owBuildNuancesTable();
@@ -842,28 +866,15 @@ function owRenderAll() {
 }
 
 function owRenderSections() {
-  document.querySelectorAll('.ow-section-line').forEach(el => el.remove());
-  const space = document.getElementById('space');
-  owSections.forEach(sec => {
-    const div = document.createElement('div');
-    div.className = 'ow-section-line';
-    div.id        = 'owsec' + sec.id;
-    div.style.top = sec.posY + 'px';
-    div.style.borderTopColor = sec.color || '#4a90d9';
-
-    const lbl = document.createElement('span');
-    lbl.className   = 'ow-section-lbl';
-    lbl.textContent = sec.name;
-    lbl.style.color = sec.color || '#4a90d9';
-    div.appendChild(lbl);
-    space.appendChild(div);
-  });
+  // Les sections n'ont pas de représentation dans l'espace de travail.
+  // Le canvas affiche uniquement les groupes de la section active.
 }
 
 function owRenderGroups() {
   document.querySelectorAll('.ow-grp').forEach(el => el.remove());
+  if (owActiveSec === null) return;
   const space = document.getElementById('space');
-  owGroups.forEach(grp => {
+  owGroups.filter(g => g.sectionId === owActiveSec).forEach(grp => {
     const div = document.createElement('div');
     div.className = 'ow-grp' + (grp.id === owActiveGrp ? ' actif' : '');
     div.id        = 'grp' + grp.id;
@@ -901,14 +912,44 @@ function owHexRgba(hex, a) {
   return 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')';
 }
 
+function toRoman(n) {
+  const vals = [1000,900,500,400,100,90,50,40,10,9,5,4,1];
+  const syms = ['M','CM','D','CD','C','XC','L','XL','X','IX','V','IV','I'];
+  let result = '';
+  for (let i = 0; i < vals.length; i++) {
+    while (n >= vals[i]) { result += syms[i]; n -= vals[i]; }
+  }
+  return result;
+}
+
+let owActiveSec = null;
+
+function owSelectSection(secId) {
+  owActiveSec = secId;
+  owActiveGrp = null;
+  owRenderAll();
+}
+
 function owBuildSectionList() {
   const div = document.getElementById('owSectionList');
   div.innerHTML = '';
-  [...owSections].sort((a,b) => a.posY - b.posY).forEach(sec => {
-    const item      = document.createElement('div');
-    item.className  = 'ow-sec-item';
+  [...owSections].sort((a,b) => a.posY - b.posY).forEach((sec, idx) => {
+    const item = document.createElement('div');
+    item.className = 'ow-sec-item' + (sec.id === owActiveSec ? ' actif' : '');
+    item.id = 'owsi' + sec.id;
     item.style.borderLeftColor = sec.color || '#4a90d9';
-    item.textContent = sec.name;
+    item.addEventListener('click', e => { e.stopPropagation(); owSelectSection(sec.id); });
+
+    const roman = document.createElement('span');
+    roman.className   = 'ow-sec-roman';
+    roman.textContent = toRoman(idx + 1);
+
+    const name = document.createElement('span');
+    name.className   = 'ow-sec-name';
+    name.textContent = sec.name;
+
+    item.appendChild(roman);
+    item.appendChild(name);
     div.appendChild(item);
   });
 }
