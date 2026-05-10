@@ -1194,20 +1194,47 @@ function owSpaceClick(e) {
 // ═══════════════════════════════════════════════
 //  DRAG ELEMENT – groupes seulement (grp*)
 // ═══════════════════════════════════════════════
+function owApplyPosConstraints(grp) {
+  const peers = owGroups.filter(g => g.sectionId === grp.sectionId && g.id !== grp.id);
+  const w = grp.w || 120;
+  let maxX = Infinity;
+
+  if (grp.posRelDebut && grp.posRelDebutGroupe) {
+    const ref = peers.find(g => g.name === grp.posRelDebutGroupe);
+    if (ref) {
+      const bound = grp.posRelDebutAvant === 'fin' ? ref.posX + (ref.w || 120) : ref.posX;
+      maxX = Math.min(maxX, bound - 1);
+    }
+  }
+  if (grp.posRelFin && grp.posRelFinGroupe) {
+    const ref = peers.find(g => g.name === grp.posRelFinGroupe);
+    if (ref) {
+      const bound = grp.posRelFinAvant === 'fin' ? ref.posX + (ref.w || 120) : ref.posX;
+      maxX = Math.min(maxX, bound - w - 1);
+    }
+  }
+
+  grp.posX = Math.max(0, maxX === Infinity ? grp.posX : Math.min(grp.posX, maxX));
+}
+
 function owDragElement(elmnt, grpData, startEvt) {
   let p1=0, p2=0, p3=startEvt.clientX, p4=startEvt.clientY;
+  const sx = startEvt.clientX, sy = startEvt.clientY;
+  let dragged = false;
 
   document.onmousemove = drag;
   document.onmouseup   = stop;
 
   function drag(e) {
     e.preventDefault();
-    p1 = p3 - e.clientX;
-    p2 = p4 - e.clientY;
-    p3 = e.clientX;
-    p4 = e.clientY;
-    grpData.posX = Math.max(0, elmnt.offsetLeft - p1);
-    grpData.posY = Math.max(0, elmnt.offsetTop  - p2);
+    if (!dragged && (Math.abs(e.clientX - sx) > 4 || Math.abs(e.clientY - sy) > 4))
+      dragged = true;
+    p1 = p3 - e.clientX; p2 = p4 - e.clientY;
+    p3 = e.clientX;       p4 = e.clientY;
+    if (!dragged) return;
+    grpData.posX = elmnt.offsetLeft - p1;
+    grpData.posY = Math.max(0, elmnt.offsetTop - p2);
+    owApplyPosConstraints(grpData);
     elmnt.style.left = grpData.posX + 'px';
     elmnt.style.top  = grpData.posY + 'px';
     owAffecterSection(grpData);
@@ -1215,8 +1242,12 @@ function owDragElement(elmnt, grpData, startEvt) {
   function stop() {
     document.onmousemove = null;
     document.onmouseup   = null;
-    owAffecterSection(grpData);
-    owModified = true;
+    if (dragged) {
+      owApplyPosConstraints(grpData);
+      elmnt.style.left = grpData.posX + 'px';
+      owAffecterSection(grpData);
+      owModified = true;
+    }
   }
 }
 
