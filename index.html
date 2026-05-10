@@ -183,6 +183,24 @@
     }
     .ow-sec-item:hover:not(.actif) { background: #edf3ff; }
 
+    /* ── Bandeau Tempo / Gain ── */
+    #owTempoBar {
+      position: absolute;
+      top: 52px; left: 0;
+      width: 12960px; height: 100px;
+      z-index: 10;
+      border-bottom: 1px solid #888;
+      display: none;
+    }
+    #owTempoBar svg { display: block; }
+    .ow-tp-btn {
+      margin-left: 10px;
+      font-size: 0.75em;
+      padding: 1px 7px;
+      cursor: pointer;
+    }
+    .ow-tp-btn.actif { font-weight: bold; outline: 2px solid #555; }
+
     /* ── Sections dans l'espace de travail ── */
     .ow-section-line {
       position: absolute;
@@ -432,6 +450,8 @@
     <span id="owGrpInfo" style="margin-left:20px;font-size:0.85em;color:#555;"></span>
     <span id="owZoomLabel">Zoom : <b id="owZoomVal">100</b> %</span>
     <span style="margin-left:40px;">Contexte</span> : <span id="owRate" style="margin-left:6px;">48000</span>
+    <button class="ow-tp-btn" id="owBtnTempoBar" onclick="owToggleTempoBar()" title="Afficher/masquer le bandeau Tempo/Gain">Tempo/Gain</button>
+    <button class="ow-tp-btn actif" id="owBtnMode" onclick="owToggleMode()" title="Mode d'ajout de point">Tempo</button>
   </div>
 
   <div id="work" style="position:absolute;top:38px;left:0;width:12960px;height:788px;overflow-x:scroll;overflow-y:hidden;border:0;">
@@ -443,6 +463,20 @@
         <style>.owRSmall{font:0.72em sans-serif;}</style>
       </svg>
     </div>
+    <!-- Bandeau Tempo / Gain -->
+    <div id="owTempoBar">
+      <svg id="owTempoSvg" width="12960" height="100" xmlns="http://www.w3.org/2000/svg">
+        <rect x="0" y="0"  width="12960" height="50"  fill="rgba(200,240,200,0.35)"/>
+        <rect x="0" y="50" width="12960" height="50"  fill="rgba(255,210,210,0.35)"/>
+        <line x1="0" y1="50" x2="12960" y2="50" stroke="#bbb" stroke-width="0.5"/>
+        <text x="4" y="13" font-size="10" fill="green" pointer-events="none">Tempo</text>
+        <text x="4" y="63" font-size="10" fill="#c33"   pointer-events="none">Gain</text>
+        <polyline id="owLineTempo" fill="none" stroke="green" stroke-width="1.5" points=""/>
+        <polyline id="owLineGain"  fill="none" stroke="#c33"  stroke-width="1.5" points=""/>
+        <rect id="owBarClickArea" x="0" y="0" width="12960" height="100" fill="transparent" style="cursor:crosshair;"/>
+      </svg>
+    </div>
+
     <div id="work2" style="position:absolute;top:52px;left:0;width:12960px;height:736px;overflow-x:hidden;overflow-y:scroll;border:1px solid #ccc;">
       <div id="spaceBkg" style="position:absolute;top:0;left:0;width:12960px;height:3000px;z-index:0;background:#f5f5f5;"></div>
       <div id="space" style="position:absolute;top:0;left:0;width:12960px;height:3000px;z-index:1;background:transparent;"
@@ -537,10 +571,15 @@ let owNuances   = [
 ];
 let owNextSecId  = 1;
 let owNextGrpId  = 1;
-let owActiveGrp  = null;   // id du groupe sélectionné
-let owFilePath   = null;   // chemin courant (Electron)
-let owImagesDir  = '';     // <partition>/Images/
+let owActiveGrp  = null;
+let owFilePath   = null;
+let owImagesDir  = '';
 let owModified   = false;
+let owTempoPoints = [];   // [{id,X,Y}]  X=pixels, Y=0..100  bpm=240-Y/0.4167
+let owGainPoints  = [];   // [{id,X,Y}]  gain=(100-Y)*0.05
+let owNbTempo = 1, owNbGain = 1;
+let owTempoVisible = false;
+let owPointMode    = 'tempo';  // 'tempo' | 'gain'
 
 // ═══════════════════════════════════════════════
 //  MENU – ouverture / fermeture
@@ -664,6 +703,22 @@ function owParseData(txt, label) {
     if (nuanceEls.length) {
       owNuances = [...nuanceEls].map(el => ({ nom: el.getAttribute('nom'), val: n(el.getAttribute('val'), 50) }));
     }
+    /* points tempo / gain */
+    owTempoPoints = []; owGainPoints = []; owNbTempo = 1; owNbGain = 1;
+    const parsePts = (selector, arr, prefix, counter) => {
+      const el  = doc.querySelector(selector);
+      const val = el ? el.getAttribute('value') : '';
+      if (val) val.split(';').filter(s => s).forEach(seg => {
+        const [xs, ys, id] = seg.split(':');
+        const X = parseFloat(xs), Y = parseFloat(ys);
+        if (!isNaN(X) && !isNaN(Y)) arr.push({id: id || (prefix + counter++), X, Y});
+      });
+      arr.sort((a, b) => a.X - b.X);
+      return counter;
+    };
+    owNbTempo = parsePts('interpretor > tempopoints', owTempoPoints, 'owtmp', owNbTempo);
+    owNbGain  = parsePts('interpretor > gainpoints',  owGainPoints,  'owgna', owNbGain);
+
     owNextSecId = secId;
     owNextGrpId = grpId;
     owActiveGrp = null;
@@ -672,6 +727,7 @@ function owParseData(txt, label) {
     if (label) document.getElementById('owFileLabel').textContent = label;
     owRenderAll();
     owBuildNuancesTable();
+    owRebuildTempoPoints();
   } catch(err) { alert('Erreur de chargement : ' + err.message); }
 }
 
@@ -701,6 +757,10 @@ function owSerialise() {
   });
   xml += `  </partition>\n  <interpretor>\n`;
   owNuances.forEach(nu => { xml += `    <nuance nom="${x(nu.nom)}" val="${nu.val}"/>\n`; });
+  if (owTempoPoints.length)
+    xml += `    <tempopoints value="${owTempoPoints.map(p=>p.X+':'+p.Y+':'+p.id).join(';')}"/>\n`;
+  if (owGainPoints.length)
+    xml += `    <gainpoints value="${owGainPoints.map(p=>p.X+':'+p.Y+':'+p.id).join(';')}"/>\n`;
   xml += `  </interpretor>\n</openwork>\n`;
   return xml;
 }
@@ -1267,6 +1327,127 @@ function owResizeElement(elmnt, grpData, startEvt) {
   };
 }
 
+
+// ═══════════════════════════════════════════════
+//  BANDEAU TEMPO / GAIN
+// ═══════════════════════════════════════════════
+function owToggleTempoBar() {
+  owTempoVisible = !owTempoVisible;
+  const bar   = document.getElementById('owTempoBar');
+  const work2 = document.getElementById('work2');
+  if (owTempoVisible) {
+    bar.style.display  = 'block';
+    work2.style.top    = '152px';
+    work2.style.height = '636px';
+  } else {
+    bar.style.display  = 'none';
+    work2.style.top    = '52px';
+    work2.style.height = '736px';
+  }
+  document.getElementById('owBtnTempoBar').classList.toggle('actif', owTempoVisible);
+}
+
+function owToggleMode() {
+  owPointMode = owPointMode === 'tempo' ? 'gain' : 'tempo';
+  const btn = document.getElementById('owBtnMode');
+  btn.textContent = owPointMode === 'tempo' ? 'Tempo' : 'Gain';
+  btn.style.color = owPointMode === 'tempo' ? 'green' : '#c33';
+}
+
+function owDrawTempo() {
+  document.getElementById('owLineTempo')
+    .setAttribute('points', owTempoPoints.map(p => p.X + ',' + p.Y).join(' '));
+}
+function owDrawGain() {
+  document.getElementById('owLineGain')
+    .setAttribute('points', owGainPoints.map(p => p.X + ',' + p.Y).join(' '));
+}
+
+function owTempoPointTitle(x, y) {
+  return 't=' + (x / OW_BASE_PX).toFixed(2) + 's  bpm=' + (240 - y / 0.4167).toFixed(1);
+}
+function owGainPointTitle(x, y) {
+  return 't=' + (x / OW_BASE_PX).toFixed(2) + 's  gain=' + ((100 - y) * 0.05).toFixed(2);
+}
+
+function owCreatePointEl(id, x, y, color, arr, drawFn, titleFn) {
+  const el = document.createElement('div');
+  el.id = id;
+  el.style.cssText = `position:absolute;top:${y - 3}px;left:${x - 3}px;` +
+    `width:7px;height:7px;border-radius:50%;background:${color};` +
+    `border:1px solid ${color};cursor:move;z-index:12;box-sizing:border-box;`;
+  el.title = titleFn(x, y);
+  el.addEventListener('contextmenu', e => { e.preventDefault(); e.stopPropagation(); });
+  el.addEventListener('mousedown', function(e) {
+    e.stopPropagation();
+    if (e.button === 2) {
+      el.remove();
+      const i = arr.findIndex(p => p.id === id);
+      if (i > -1) arr.splice(i, 1);
+      drawFn();
+      owModified = true;
+      return;
+    }
+    owDragPoint(el, id, arr, drawFn, titleFn, e);
+  });
+  document.getElementById('owTempoBar').appendChild(el);
+}
+
+function owDragPoint(el, id, arr, drawFn, titleFn, startEvt) {
+  const bar     = document.getElementById('owTempoBar');
+  const barRect = bar.getBoundingClientRect();
+  document.onmousemove = function(e) {
+    const x = Math.max(0, Math.round(e.clientX - barRect.left));
+    const y = Math.max(0, Math.min(99, Math.round(e.clientY - barRect.top)));
+    el.style.left = (x - 3) + 'px';
+    el.style.top  = (y - 3) + 'px';
+    const p = arr.find(p => p.id === id);
+    if (p) { p.X = x; p.Y = y; }
+    arr.sort((a, b) => a.X - b.X);
+    el.title = titleFn(x, y);
+    drawFn();
+  };
+  document.onmouseup = function() {
+    document.onmousemove = null;
+    document.onmouseup   = null;
+    owModified = true;
+  };
+}
+
+function owInsertTempoPoint(x, y) {
+  const id = 'owtmp' + owNbTempo++;
+  owTempoPoints.push({id, X: x, Y: y});
+  owTempoPoints.sort((a, b) => a.X - b.X);
+  owCreatePointEl(id, x, y, 'green', owTempoPoints, owDrawTempo, owTempoPointTitle);
+  owDrawTempo();
+  owModified = true;
+}
+function owInsertGainPoint(x, y) {
+  const id = 'owgna' + owNbGain++;
+  owGainPoints.push({id, X: x, Y: y});
+  owGainPoints.sort((a, b) => a.X - b.X);
+  owCreatePointEl(id, x, y, '#c33', owGainPoints, owDrawGain, owGainPointTitle);
+  owDrawGain();
+  owModified = true;
+}
+
+function owRebuildTempoPoints() {
+  document.querySelectorAll('[id^="owtmp"],[id^="owgna"]').forEach(el => el.remove());
+  owTempoPoints.forEach(p => owCreatePointEl(p.id, p.X, p.Y, 'green', owTempoPoints, owDrawTempo, owTempoPointTitle));
+  owGainPoints.forEach(p  => owCreatePointEl(p.id, p.X, p.Y, '#c33',  owGainPoints,  owDrawGain,  owGainPointTitle));
+  owDrawTempo();
+  owDrawGain();
+}
+
+document.getElementById('owBarClickArea').addEventListener('click', function(e) {
+  e.stopPropagation();
+  const barRect = document.getElementById('owTempoBar').getBoundingClientRect();
+  const x = Math.max(0, Math.round(e.clientX - barRect.left));
+  const y = Math.max(0, Math.min(99, Math.round(e.clientY - barRect.top)));
+  if (owPointMode === 'tempo') owInsertTempoPoint(x, y);
+  else                         owInsertGainPoint(x, y);
+});
+document.getElementById('owBarClickArea').addEventListener('contextmenu', e => e.preventDefault());
 
 // ═══════════════════════════════════════════════
 //  DRAG des popups (via leur header)
