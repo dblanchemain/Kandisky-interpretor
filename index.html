@@ -1507,11 +1507,12 @@ function owRenderGroups() {
     const lbl = document.createElement('span');
     lbl.className = 'ow-grp-lbl';
     lbl.textContent = grp.name;
-    lbl.style.cursor = 'pointer';
     lbl.style.pointerEvents = 'auto';
-    lbl.addEventListener('click', e => {
+    lbl.addEventListener('contextmenu', e => {
+      e.preventDefault();
       e.stopPropagation();
-      if (!owDragMoved) owParamsGroupe();
+      owSelectGrp(grp.id);
+      owParamsGroupe();
     });
     centerDiv.appendChild(lbl);
     div.appendChild(centerDiv);
