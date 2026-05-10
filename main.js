@@ -39,8 +39,12 @@ ipcMain.on('toMain', (event, args) => {
         filters: [{ name: 'OpenWork XML', extensions: ['xml'] }, { name: 'Tous', extensions: ['*'] }]
       }).then(result => {
         if (result.canceled || !result.filePaths[0]) return;
+        const data = fs.readFileSync(result.filePaths[0], 'utf-8');
+        if (!/<openwork\b/i.test(data) || !/\bversion\s*=/i.test(data)) {
+          dialog.showErrorBox('Fichier invalide', 'Ce fichier n\'est pas une partition OpenWork valide.');
+          return;
+        }
         currentFilePath = result.filePaths[0];
-        const data = fs.readFileSync(currentFilePath, 'utf-8');
         win.webContents.send('fromMain', 'owLoaded;' + data);
       }).catch(err => console.error('interpOpen:', err));
       break;
