@@ -35,6 +35,7 @@ ipcMain.on('toMain', (event, args) => {
     case 'interpOpen': {
       dialog.showOpenDialog(win, {
         properties: ['openFile'],
+        defaultPath: app.getPath('documents'),
         filters: [{ name: 'OpenWork XML', extensions: ['xml'] }, { name: 'Tous', extensions: ['*'] }]
       }).then(result => {
         if (result.canceled || !result.filePaths[0]) return;
