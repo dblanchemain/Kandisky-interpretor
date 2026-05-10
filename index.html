@@ -213,11 +213,12 @@
       background-color: rgba(200, 220, 255, 0.45);
       cursor: move;
       z-index: 5;
-      min-width: 40px;
-      min-height: 24px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      min-width: 60px;
+      min-height: 50px;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      grid-template-columns: auto 1fr;
+      grid-template-areas: "top top" "aug center" "bot bot";
       overflow: hidden;
       box-sizing: border-box;
     }
@@ -225,12 +226,78 @@
       border: 2px solid #e04400;
       box-shadow: 0 0 4px rgba(224,68,0,0.5);
     }
+    .ow-grp-top {
+      grid-area: top;
+      display: flex;
+      justify-content: center;
+      border-bottom: 1px solid rgba(0,0,0,0.12);
+      background: rgba(255,255,255,0.25);
+    }
+    .ow-grp-top select {
+      font-size: 0.65em;
+      width: 100%;
+      cursor: pointer;
+      background: transparent;
+      border: none;
+      padding: 1px 2px;
+      outline: none;
+    }
+    .ow-grp-aug {
+      grid-area: aug;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 2px;
+      border-right: 1px solid rgba(0,0,0,0.12);
+    }
+    .ow-grp-aug input {
+      width: 34px;
+      font-size: 0.62em;
+      text-align: center;
+      border: 1px solid rgba(0,0,0,0.2);
+      background: rgba(255,255,255,0.6);
+      padding: 1px;
+      cursor: ns-resize;
+    }
+    .ow-grp-center {
+      grid-area: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      padding: 2px;
+      gap: 1px;
+    }
+    .ow-grp-img {
+      max-width: 100%;
+      max-height: 50%;
+      object-fit: contain;
+      pointer-events: none;
+      flex-shrink: 1;
+    }
     .ow-grp-lbl {
       pointer-events: none;
-      font-size: 0.75em;
+      font-size: 0.72em;
       text-align: center;
       word-break: break-word;
-      padding: 2px;
+      line-height: 1.1;
+    }
+    .ow-grp-bot {
+      grid-area: bot;
+      display: flex;
+      justify-content: center;
+      border-top: 1px solid rgba(0,0,0,0.12);
+      background: rgba(255,255,255,0.25);
+      padding: 1px;
+    }
+    .ow-grp-bot input {
+      width: 60px;
+      font-size: 0.62em;
+      text-align: center;
+      border: 1px solid rgba(0,0,0,0.2);
+      background: rgba(255,255,255,0.6);
+      padding: 1px;
     }
 
     /* ── Popups communs ── */
@@ -547,6 +614,8 @@ function owParseData(txt, label) {
           expansion: b(g.getAttribute('expansion')),
           expansionMin: n(g.getAttribute('expansionMin'), 0.5),
           expansionMax: n(g.getAttribute('expansionMax'), 2.0),
+          expansionVal: n(g.getAttribute('expansionVal'), 1.0),
+          augDimVal:    n(g.getAttribute('augDimVal'), 0),
           variationTempo:     b(g.getAttribute('variationTempo')),
           variationIntensite: b(g.getAttribute('variationIntensite')),
           posRelDebut:        b(g.getAttribute('posRelDebut')),
@@ -589,8 +658,8 @@ function owSerialise() {
       xml += ` retrograde="${b(grp.retrograde)}" renvRetrograde="${b(grp.renvRetrograde)}"`;
       xml += ` repetition="${b(grp.repetition)}" repetitionMax="${grp.repetitionMax ?? 2}"`;
       xml += ` transposition="${b(grp.transposition)}"`;
-      xml += ` augDim="${b(grp.augDim)}" augDimMin="${grp.augDimMin ?? -2}" augDimMax="${grp.augDimMax ?? 2}"`;
-      xml += ` expansion="${b(grp.expansion)}" expansionMin="${grp.expansionMin ?? 0.5}" expansionMax="${grp.expansionMax ?? 2.0}"`;
+      xml += ` augDim="${b(grp.augDim)}" augDimMin="${grp.augDimMin ?? -2}" augDimMax="${grp.augDimMax ?? 2}" augDimVal="${grp.augDimVal ?? 0}"`;
+      xml += ` expansion="${b(grp.expansion)}" expansionMin="${grp.expansionMin ?? 0.5}" expansionMax="${grp.expansionMax ?? 2.0}" expansionVal="${grp.expansionVal ?? 1.0}"`;
       xml += ` variationTempo="${b(grp.variationTempo)}" variationIntensite="${b(grp.variationIntensite)}"`;
       xml += ` posRelDebut="${b(grp.posRelDebut)}" posRelDebutAvant="${x(grp.posRelDebutAvant)}" posRelDebutGroupe="${x(grp.posRelDebutGroupe)}"`;
       xml += ` posRelFin="${b(grp.posRelFin)}" posRelFinAvant="${x(grp.posRelFinAvant)}" posRelFinGroupe="${x(grp.posRelFinGroupe)}"`;
@@ -870,6 +939,15 @@ function owRenderSections() {
   // Le canvas affiche uniquement les groupes de la section active.
 }
 
+function owGrpGlyph(dir) {
+  switch (dir) {
+    case 'renversement':   return 'images/glyphRenverse.svg';
+    case 'retrograde':     return 'images/glyphRetrograde.svg';
+    case 'renvRetrograde': return 'images/glyphRetrogradeRv.svg';
+    default:               return 'images/glyphRepete.svg';
+  }
+}
+
 function owRenderGroups() {
   document.querySelectorAll('.ow-grp').forEach(el => el.remove());
   if (owActiveSec === null) return;
@@ -877,15 +955,86 @@ function owRenderGroups() {
   owGroups.filter(g => g.sectionId === owActiveSec).forEach(grp => {
     const div = document.createElement('div');
     div.className = 'ow-grp' + (grp.id === owActiveGrp ? ' actif' : '');
-    div.id        = 'grp' + grp.id;
+    div.id = 'grp' + grp.id;
     owApplyGrpStyle(div, grp);
-    div.style.left = grp.posX + 'px';
-    div.style.top  = grp.posY + 'px';
 
+    /* ── Haut : select transformation ── */
+    const topDiv = document.createElement('div');
+    topDiv.className = 'ow-grp-top';
+    const allowed = [];
+    if (grp.direct)         allowed.push(['direct',        'Direct']);
+    if (grp.renversement)   allowed.push(['renversement',  'Renversement']);
+    if (grp.retrograde)     allowed.push(['retrograde',    'Rétrograde']);
+    if (grp.renvRetrograde) allowed.push(['renvRetrograde','Renv.+Rétrograde']);
+    if (allowed.length) {
+      if (!allowed.find(a => a[0] === grp.dir)) grp.dir = allowed[0][0];
+      const sel = document.createElement('select');
+      allowed.forEach(([val, lbl]) => sel.appendChild(new Option(lbl, val)));
+      sel.value = grp.dir;
+      sel.addEventListener('mousedown', e => { e.stopPropagation(); owSelectGrp(grp.id); });
+      sel.addEventListener('change', e => {
+        grp.dir = e.target.value;
+        const img = div.querySelector('.ow-grp-img');
+        if (img) img.src = owGrpGlyph(grp.dir);
+        owModified = true;
+      });
+      topDiv.appendChild(sel);
+    } else {
+      topDiv.style.display = 'none';
+    }
+    div.appendChild(topDiv);
+
+    /* ── Gauche : augmentation verticale ── */
+    const augDiv = document.createElement('div');
+    augDiv.className = 'ow-grp-aug';
+    if (grp.augDim) {
+      const inp = document.createElement('input');
+      inp.type = 'number';
+      inp.min = grp.augDimMin ?? -2;
+      inp.max = grp.augDimMax ??  2;
+      inp.step = 0.5;
+      inp.value = grp.augDimVal ?? 0;
+      inp.title = 'Augmentation verticale';
+      inp.addEventListener('mousedown', e => { e.stopPropagation(); owSelectGrp(grp.id); });
+      inp.addEventListener('input', e => { grp.augDimVal = parseFloat(e.target.value); owModified = true; });
+      augDiv.appendChild(inp);
+    } else {
+      augDiv.style.display = 'none';
+    }
+    div.appendChild(augDiv);
+
+    /* ── Centre : image + label ── */
+    const centerDiv = document.createElement('div');
+    centerDiv.className = 'ow-grp-center';
+    const img = document.createElement('img');
+    img.className = 'ow-grp-img';
+    img.src = owGrpGlyph(grp.dir);
+    img.draggable = false;
+    centerDiv.appendChild(img);
     const lbl = document.createElement('span');
-    lbl.className   = 'ow-grp-lbl';
-    lbl.textContent = grp.name + (grp.nuance ? ' [' + grp.nuance + ']' : '');
-    div.appendChild(lbl);
+    lbl.className = 'ow-grp-lbl';
+    lbl.textContent = grp.name;
+    centerDiv.appendChild(lbl);
+    div.appendChild(centerDiv);
+
+    /* ── Bas : expansion temporelle ── */
+    const botDiv = document.createElement('div');
+    botDiv.className = 'ow-grp-bot';
+    if (grp.expansion) {
+      const inp = document.createElement('input');
+      inp.type = 'number';
+      inp.min = grp.expansionMin ?? 0.5;
+      inp.max = grp.expansionMax ?? 2.0;
+      inp.step = 0.1;
+      inp.value = grp.expansionVal ?? 1.0;
+      inp.title = 'Expansion temporelle';
+      inp.addEventListener('mousedown', e => { e.stopPropagation(); owSelectGrp(grp.id); });
+      inp.addEventListener('input', e => { grp.expansionVal = parseFloat(e.target.value); owModified = true; });
+      botDiv.appendChild(inp);
+    } else {
+      botDiv.style.display = 'none';
+    }
+    div.appendChild(botDiv);
 
     div.addEventListener('mousedown', function(e) {
       e.stopPropagation();
@@ -902,7 +1051,7 @@ function owApplyGrpStyle(el, grp) {
   el.style.borderColor     = grp.color || '#4a90d9';
   el.style.backgroundColor = owHexRgba(grp.color || '#c8dcff', grp.opacity ?? 0.45);
   const lbl = el.querySelector('.ow-grp-lbl');
-  if (lbl) lbl.textContent = grp.name + (grp.nuance ? ' [' + grp.nuance + ']' : '');
+  if (lbl) lbl.textContent = grp.name;
 }
 
 function owHexRgba(hex, a) {
