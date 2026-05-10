@@ -1237,7 +1237,6 @@ function owDragElement(elmnt, grpData, startEvt) {
     owApplyPosConstraints(grpData);
     elmnt.style.left = grpData.posX + 'px';
     elmnt.style.top  = grpData.posY + 'px';
-    owAffecterSection(grpData);
   }
   function stop() {
     document.onmousemove = null;
@@ -1245,7 +1244,6 @@ function owDragElement(elmnt, grpData, startEvt) {
     if (dragged) {
       owApplyPosConstraints(grpData);
       elmnt.style.left = grpData.posX + 'px';
-      owAffecterSection(grpData);
       owModified = true;
     }
   }
@@ -1269,15 +1267,6 @@ function owResizeElement(elmnt, grpData, startEvt) {
   };
 }
 
-function owAffecterSection(grp) {
-  const sorted = [...owSections].sort((a,b) => a.posY - b.posY);
-  let aff = null;
-  for (const sec of sorted) {
-    if (sec.posY <= grp.posY) aff = sec;
-  }
-  if (aff) grp.sectionId = aff.id;
-  owUpdateInfo();
-}
 
 // ═══════════════════════════════════════════════
 //  DRAG des popups (via leur header)
