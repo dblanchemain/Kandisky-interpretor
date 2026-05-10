@@ -183,6 +183,39 @@
     }
     .ow-sec-item:hover:not(.actif) { background: #edf3ff; }
 
+    /* ── Palette de nuances ── */
+    #owNuanceHeader {
+      padding: 5px 4px;
+      border: 1px solid #aaa;
+      margin: 4px;
+      text-align: center;
+      font-weight: bold;
+      font-size: 0.9em;
+      background-color: #d8e4f0;
+      letter-spacing: 1px;
+    }
+    #owNuancePalette {
+      padding: 2px 4px;
+      font-size: 0.85em;
+      overflow-y: auto;
+      max-height: 240px;
+    }
+    .ow-nu-btn {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 3px 6px;
+      margin: 2px 0;
+      cursor: pointer;
+      border: 1px solid #c0c8d8;
+      border-radius: 3px;
+      background: #eef2f8;
+    }
+    .ow-nu-btn:hover { background: #d0ddf0; border-color: #4a90d9; }
+    .ow-nu-btn.actif { background: #4a90d9; color: #fff; border-color: #2a70b9; font-weight: bold; }
+    .ow-nu-val { font-size: 0.78em; color: #888; }
+    .ow-nu-btn.actif .ow-nu-val { color: #cde; }
+
     /* ── Bandeau Tempo / Gain ── */
     #owTempoBar {
       position: absolute;
@@ -438,6 +471,8 @@
   <h2 style="font-size:0.95em;margin:4px 0;">Interpretor</h2>
   <div id="owSectionHeader">Sections</div>
   <div id="owSectionList"></div>
+  <div id="owNuanceHeader">Nuances</div>
+  <div id="owNuancePalette"></div>
 </div>
 
 <!-- ════════════════════════ ESPACE SECONDAIRE ════════════════════════ -->
@@ -778,6 +813,7 @@ function owParseData(txt, label) {
     if (label) document.getElementById('owFileLabel').textContent = label;
     owRenderAll();
     owBuildNuancesTable();
+    owBuildNuancePalette();
     owRebuildTempoPoints();
   } catch(err) { alert('Erreur de chargement : ' + err.message); }
 }
@@ -1088,6 +1124,38 @@ function owShowPrefTab(tab) {
   document.querySelector('.pref-tab[onclick*="' + tab + '"]').classList.add('actif');
 }
 
+function owBuildNuancePalette() {
+  const pal = document.getElementById('owNuancePalette');
+  if (!pal) return;
+  pal.innerHTML = '';
+  const activeGrp = owGroups.find(g => g.id === owActiveGrp);
+  const current   = activeGrp ? activeGrp.nuance : '';
+  owNuances.forEach(nu => {
+    const btn = document.createElement('div');
+    btn.className = 'ow-nu-btn' + (nu.nom === current ? ' actif' : '');
+    btn.innerHTML = '<span>' + nu.nom + '</span><span class="ow-nu-val">' + nu.val + '</span>';
+    btn.addEventListener('click', () => owApplyNuance(nu.nom));
+    pal.appendChild(btn);
+  });
+}
+
+function owApplyNuance(nom) {
+  if (owActiveGrp === null) { alert('Sélectionnez d\'abord un groupe.'); return; }
+  const grp = owGroups.find(g => g.id === owActiveGrp);
+  if (!grp) return;
+  const nu = owNuances.find(n => n.nom === nom);
+  if (!nu) return;
+  grp.nuance = nom;
+  /* Point de gain à la position du groupe : Y = 100 - val (val=intensité, 0-100) */
+  const X = Math.round(grp.posX);
+  const Y = Math.max(0, Math.min(99, 100 - nu.val));
+  owInsertGainPoint(X, Y);
+  /* Rafraîchir l'info et la palette */
+  if (document.getElementById('grpInfoPopup').style.display !== 'none') owShowGrpInfo(grp);
+  owBuildNuancePalette();
+  owModified = true;
+}
+
 function owBuildNuancesTable() {
   const tbody = document.getElementById('nuancesBody');
   tbody.innerHTML = '';
@@ -1104,6 +1172,7 @@ function owBuildNuancesTable() {
 
 function owNuanceVal(inp) {
   owNuances[parseInt(inp.dataset.idx)].val = parseInt(inp.value) || 0;
+  owBuildNuancePalette();
   owModified = true;
 }
 
@@ -1339,6 +1408,7 @@ function owSelectGrp(id) {
   owUpdateInfo();
   const grp = owGroups.find(g => g.id === id);
   if (grp) owShowGrpInfo(grp);
+  owBuildNuancePalette();
 }
 
 function owShowGrpInfo(grp) {
