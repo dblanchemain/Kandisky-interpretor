@@ -1401,8 +1401,9 @@ function owCreatePointEl(id, x, y, color, arr, drawFn, titleFn) {
 function owDragPoint(el, id, arr, drawFn, titleFn, startEvt) {
   const bar     = document.getElementById('owTempoBar');
   const barRect = bar.getBoundingClientRect();
+  const isFirst = arr.length > 0 && arr.sort((a, b) => a.X - b.X)[0].id === id;
   document.onmousemove = function(e) {
-    const x = Math.max(0, Math.round(e.clientX - barRect.left));
+    const x = isFirst ? 0 : Math.max(0, Math.round(e.clientX - barRect.left));
     const y = Math.max(0, Math.min(99, Math.round(e.clientY - barRect.top)));
     el.style.left = (x - 3) + 'px';
     el.style.top  = (y - 3) + 'px';
