@@ -1014,9 +1014,18 @@ function owDoPermuter() {
   const s2 = owSections.find(s => s.id === id2);
   if (!s1 || !s2) return;
   const dy = s2.posY - s1.posY;
+  /* Déplacer groupes ET instances de nuances avec leur section, sectionId inchangé */
   owGroups.forEach(g => {
-    if (g.sectionId === id1) { g.posY += dy; g.sectionId = id2; }
-    else if (g.sectionId === id2) { g.posY -= dy; g.sectionId = id1; }
+    if (g.sectionId === id1) g.posY += dy;
+    else if (g.sectionId === id2) g.posY -= dy;
+  });
+  owNuanceInsts.forEach(inst => {
+    const gp = owGainPoints.find(p => p.id === inst.gainPtId);
+    if (!gp) return;
+    const grp = owGroups.find(g => Math.round(g.posX) === gp.X);
+    if (!grp) return;
+    if (grp.sectionId === id1) inst.posY += dy;
+    else if (grp.sectionId === id2) inst.posY -= dy;
   });
   const tmp = s1.posY;
   s1.posY = s2.posY;
