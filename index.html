@@ -234,7 +234,7 @@
       background: rgba(255,255,255,0.25);
     }
     .ow-grp-top select {
-      font-size: 0.65em;
+      font-size: 0.75em;
       width: 100%;
       cursor: pointer;
       background: transparent;
@@ -245,14 +245,21 @@
     .ow-grp-aug {
       grid-area: aug;
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
       padding: 0 2px;
       border-right: 1px solid rgba(0,0,0,0.12);
+      gap: 1px;
+    }
+    .ow-grp-aug-lbl {
+      font-size: 0.72em;
+      pointer-events: none;
+      line-height: 1;
     }
     .ow-grp-aug input {
       width: 34px;
-      font-size: 0.62em;
+      font-size: 0.72em;
       text-align: center;
       border: 1px solid rgba(0,0,0,0.2);
       background: rgba(255,255,255,0.6);
@@ -279,7 +286,7 @@
     }
     .ow-grp-lbl {
       pointer-events: none;
-      font-size: 0.72em;
+      font-size: 0.82em;
       text-align: center;
       word-break: break-word;
       line-height: 1.1;
@@ -302,14 +309,21 @@
     .ow-grp-bot {
       grid-area: bot;
       display: flex;
+      align-items: center;
       justify-content: center;
+      gap: 3px;
       border-top: 1px solid rgba(0,0,0,0.12);
       background: rgba(255,255,255,0.25);
-      padding: 1px;
+      padding: 1px 3px;
+    }
+    .ow-grp-bot-lbl {
+      font-size: 0.72em;
+      pointer-events: none;
+      white-space: nowrap;
     }
     .ow-grp-bot input {
-      width: 60px;
-      font-size: 0.62em;
+      width: 50px;
+      font-size: 0.72em;
       text-align: center;
       border: 1px solid rgba(0,0,0,0.2);
       background: rgba(255,255,255,0.6);
@@ -1014,6 +1028,10 @@ function owRenderGroups() {
     const augDiv = document.createElement('div');
     augDiv.className = 'ow-grp-aug';
     if (grp.augDim) {
+      const lbl = document.createElement('span');
+      lbl.className = 'ow-grp-aug-lbl';
+      lbl.textContent = 'Augm.';
+      augDiv.appendChild(lbl);
       const inp = document.createElement('input');
       inp.type = 'number';
       inp.min = grp.augDimMin ?? -2;
@@ -1047,6 +1065,10 @@ function owRenderGroups() {
     const botDiv = document.createElement('div');
     botDiv.className = 'ow-grp-bot';
     if (grp.expansion) {
+      const lbl = document.createElement('span');
+      lbl.className = 'ow-grp-bot-lbl';
+      lbl.textContent = 'Expans.';
+      botDiv.appendChild(lbl);
       const inp = document.createElement('input');
       inp.type = 'number';
       inp.min = grp.expansionMin ?? 0.5;
