@@ -238,6 +238,15 @@
       display: none;
     }
     #owTempoBar svg { display: block; }
+    #owBarVerticale {
+      position: absolute;
+      top: 0; left: 0;
+      width: 14px;
+      height: 788px;
+      z-index: 20;
+      cursor: ew-resize;
+      pointer-events: auto;
+    }
     .ow-tp-btn {
       margin-left: 8px;
       font-size: 0.78em;
@@ -540,6 +549,13 @@
         <div id="selector" style="position:absolute;top:0;left:0;width:10px;height:10px;border:1px dashed #000;display:none;z-index:10;"></div>
       </div>
     </div>
+    <!-- Barre verticale de lecture -->
+    <div id="owBarVerticale">
+      <svg width="14" height="14" style="position:absolute;top:0;left:0;" xmlns="http://www.w3.org/2000/svg">
+        <polyline points="0,14 7,0 14,14 0,14" fill="#e05" stroke="none"/>
+      </svg>
+      <div style="position:absolute;top:14px;left:6px;width:2px;height:774px;background:#e05;opacity:0.75;"></div>
+    </div>
   </div>
 </div>
 
@@ -756,6 +772,7 @@ function owNouveau() {
   owTempoBySection = {}; owGainBySection = {}; owNuanceInstsBySection = {};
   owTempoPoints = []; owGainPoints = []; owNbTempo = 1; owNbGain = 1;
   owCloseAllPopups();
+  owResetBarVert();
   document.getElementById('owFileLabel').textContent = 'Sans titre';
   owRebuildTempoPoints();
   owRenderAll();
@@ -911,6 +928,7 @@ function owParseData(txt, label) {
     owActiveSec = owSections.length ? owSections[0].id : null;
     owLoadSectionCurves(owActiveSec);
     owCloseAllPopups();
+    owResetBarVert();
     if (label) document.getElementById('owFileLabel').textContent = label;
     owRenderAll();
     owBuildNuancesTable();
@@ -2072,6 +2090,45 @@ function owResetCompteur() {
   document.getElementById('compteurH').textContent = ' 00 :';
   document.getElementById('compteurM').textContent = ' 00 : ';
   document.getElementById('compteurS').textContent = ' 00.00';
+}
+
+// ═══════════════════════════════════════════════
+//  BARRE VERTICALE DE LECTURE
+// ═══════════════════════════════════════════════
+let owBarVertTime = 0;
+
+(function() {
+  const bar = document.getElementById('owBarVerticale');
+  let dragging = false, startX = 0, startLeft = 0;
+
+  bar.addEventListener('mousedown', function(e) {
+    e.stopPropagation();
+    e.preventDefault();
+    dragging  = true;
+    startX    = e.clientX;
+    startLeft = parseFloat(bar.style.left) || 0;
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup',   onUp);
+  });
+
+  function onMove(e) {
+    if (!dragging) return;
+    const newLeft = Math.max(0, startLeft + (e.clientX - startX));
+    bar.style.left    = newLeft + 'px';
+    owBarVertTime     = newLeft / (OW_BASE_PX * owZoomScale);
+    owSetCompteur(newLeft);
+  }
+
+  function onUp() {
+    dragging = false;
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup',   onUp);
+  }
+})();
+
+function owResetBarVert() {
+  document.getElementById('owBarVerticale').style.left = '0px';
+  owBarVertTime = 0;
 }
 
 // Contexte audio – taux d'échantillonnage
