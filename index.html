@@ -476,6 +476,8 @@
         <text x="4" y="63" font-size="10" fill="#c33"   pointer-events="none">Gain</text>
         <polyline id="owLineTempo" fill="none" stroke="green" stroke-width="1.5" points=""/>
         <polyline id="owLineGain"  fill="none" stroke="#c33"  stroke-width="1.5" points=""/>
+        <circle id="owEndTempo" cx="12956" cy="75" r="4" fill="green" pointer-events="none"/>
+        <circle id="owEndGain"  cx="12956" cy="80" r="4" fill="#c33"  pointer-events="none"/>
         <rect id="owBarClickArea" x="0" y="0" width="12960" height="100" fill="transparent" style="cursor:crosshair;"/>
       </svg>
     </div>
@@ -1359,13 +1361,20 @@ function owToggleMode() {
   btn.style.color = owPointMode === 'tempo' ? 'green' : '#c33';
 }
 
+const OW_END_X = 12956;
 function owDrawTempo() {
-  document.getElementById('owLineTempo')
-    .setAttribute('points', owTempoPoints.map(p => p.X + ',' + p.Y).join(' '));
+  const pts = [...owTempoPoints].sort((a, b) => a.X - b.X);
+  const lastY = pts.length ? pts.at(-1).Y : 75;
+  document.getElementById('owEndTempo').setAttribute('cy', lastY);
+  const line = pts.map(p => p.X + ',' + p.Y).join(' ') + (pts.length ? ' ' + OW_END_X + ',' + lastY : '');
+  document.getElementById('owLineTempo').setAttribute('points', line);
 }
 function owDrawGain() {
-  document.getElementById('owLineGain')
-    .setAttribute('points', owGainPoints.map(p => p.X + ',' + p.Y).join(' '));
+  const pts = [...owGainPoints].sort((a, b) => a.X - b.X);
+  const lastY = pts.length ? pts.at(-1).Y : 80;
+  document.getElementById('owEndGain').setAttribute('cy', lastY);
+  const line = pts.map(p => p.X + ',' + p.Y).join(' ') + (pts.length ? ' ' + OW_END_X + ',' + lastY : '');
+  document.getElementById('owLineGain').setAttribute('points', line);
 }
 
 function owTempoPointTitle(x, y) {
@@ -1386,6 +1395,8 @@ function owCreatePointEl(id, x, y, color, arr, drawFn, titleFn) {
   el.addEventListener('mousedown', function(e) {
     e.stopPropagation();
     if (e.button === 2) {
+      const isFirst = [...arr].sort((a, b) => a.X - b.X)[0]?.id === id;
+      if (isFirst) return;
       el.remove();
       const i = arr.findIndex(p => p.id === id);
       if (i > -1) arr.splice(i, 1);
@@ -1401,7 +1412,7 @@ function owCreatePointEl(id, x, y, color, arr, drawFn, titleFn) {
 function owDragPoint(el, id, arr, drawFn, titleFn, startEvt) {
   const bar     = document.getElementById('owTempoBar');
   const barRect = bar.getBoundingClientRect();
-  const isFirst = arr.length > 0 && arr.sort((a, b) => a.X - b.X)[0].id === id;
+  const isFirst = arr.length > 0 && [...arr].sort((a, b) => a.X - b.X)[0].id === id;
   document.onmousemove = function(e) {
     const x = isFirst ? 0 : Math.max(0, Math.round(e.clientX - barRect.left));
     const y = Math.max(0, Math.min(99, Math.round(e.clientY - barRect.top)));
