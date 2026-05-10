@@ -426,6 +426,8 @@
     </ul>
   </div>
 
+  <div class="mnu-item" id="mnuPrefs" onclick="owOuvrirPrefs()">Préférences</div>
+
   <button class="ow-tp-btn" id="owBtnTempoBar" onclick="owToggleTempoBar()" title="Afficher/masquer le bandeau Tempo/Gain">Tempo/Gain</button>
   <button class="ow-tp-btn actif" id="owBtnMode" onclick="owToggleMode()" style="color:green;" title="Mode d'ajout de point">Tempo</button>
   <span id="owFileLabel">Sans titre</span>
@@ -484,6 +486,7 @@
 
     <div id="work2" style="position:absolute;top:52px;left:0;width:12960px;height:736px;overflow-x:hidden;overflow-y:scroll;border:1px solid #ccc;">
       <div id="spaceBkg" style="position:absolute;top:0;left:0;width:12960px;height:3000px;z-index:0;background:#f5f5f5;"></div>
+      <svg id="owGridSvg" style="position:absolute;top:0;left:0;width:12960px;height:3000px;z-index:0;pointer-events:none;" width="12960" height="3000"></svg>
       <div id="space" style="position:absolute;top:0;left:0;width:12960px;height:3000px;z-index:1;background:transparent;"
            onclick="owSpaceClick(event)" oncontextmenu="event.preventDefault();">
         <div id="selector" style="position:absolute;top:0;left:0;width:10px;height:10px;border:1px dashed #000;display:none;z-index:10;"></div>
@@ -546,6 +549,37 @@
   <div id="prefsPopupHeader" class="ow-popup-hd">Préférences</div>
   <div id="prefTabBar">
     <div class="pref-tab actif" onclick="owShowPrefTab('nuances')">Nuances</div>
+    <div class="pref-tab" onclick="owShowPrefTab('grille')">Grille</div>
+  </div>
+  <div id="prefPaneGrille" class="pref-pane">
+    <table border="0" cellpadding="5">
+      <tbody>
+        <tr>
+          <td>Grille :</td>
+          <td>
+            <label style="margin-right:10px;"><input type="radio" name="owGridOpt" value="1" onchange="owSetGrid(true)"> Oui</label>
+            <label><input type="radio" name="owGridOpt" value="0" checked onchange="owSetGrid(false)"> Non</label>
+          </td>
+        </tr>
+        <tr>
+          <td>Mesure :</td>
+          <td><input id="owGrilleMesure" type="number" min="1" max="16" step="1" value="4"
+               style="width:60px;" oninput="owGrilleChanged()"/> temps</td>
+        </tr>
+        <tr>
+          <td>Subdivision :</td>
+          <td>
+            <select id="owGrilleDiv" onchange="owGrilleChanged()">
+              <option value="0.25">1</option>
+              <option value="0.5">2</option>
+              <option value="1" selected>4</option>
+              <option value="2">8</option>
+              <option value="4">16</option>
+            </select>
+          </td>
+        </tr>
+      </tbody>
+    </table>
   </div>
   <div id="prefPaneNuances" class="pref-pane actif">
     <table border="0" cellpadding="3">
@@ -585,6 +619,7 @@ let owGainPoints  = [];   // [{id,X,Y}]  gain=(100-Y)*0.05
 let owNbTempo = 1, owNbGain = 1;
 let owTempoVisible = false;
 let owPointMode    = 'tempo';  // 'tempo' | 'gain'
+let owGridVisible  = false;
 
 // ═══════════════════════════════════════════════
 //  MENU – ouverture / fermeture
@@ -975,7 +1010,64 @@ function owUpdateGrp(param) {
 function owOuvrirPrefs() {
   owCloseMenus();
   owBuildNuancesTable();
+  document.getElementById('owGrilleMesure').value = document.getElementById('owNbMesure').value;
+  document.getElementById('owGrilleDiv').value     = document.getElementById('owNbDiv').value;
+  document.querySelector('input[name="owGridOpt"][value="' + (owGridVisible ? '1' : '0') + '"]').checked = true;
   document.getElementById('prefsPopup').style.display = 'block';
+}
+
+function owSetGrid(visible) {
+  owGridVisible = visible;
+  owDrawGrid();
+}
+
+function owGrilleChanged() {
+  document.getElementById('owNbMesure').value = document.getElementById('owGrilleMesure').value;
+  document.getElementById('owNbDiv').value    = document.getElementById('owGrilleDiv').value;
+  owRedrawReglette();
+}
+
+function owDrawGrid() {
+  const svg = document.getElementById('owGridSvg');
+  svg.innerHTML = '';
+  if (!owGridVisible) return;
+  const NS = 'http://www.w3.org/2000/svg';
+  const scale    = owZoomScale;
+  const nbmes    = parseInt(document.getElementById('owGrilleMesure').value) || 4;
+  const nbdiv    = parseFloat(document.getElementById('owGrilleDiv').value) || 1;
+  const beatPx   = OW_BASE_PX * scale;
+  const divPx    = beatPx / nbdiv;
+  const mesurePx = nbmes * beatPx;
+  const H = 3000;
+  const W = parseInt(svg.getAttribute('width')) || 12960;
+  const mkL = (parent, x, stroke, sw) => {
+    const l = document.createElementNS(NS, 'line');
+    l.setAttribute('x1', x); l.setAttribute('y1', 0);
+    l.setAttribute('x2', x); l.setAttribute('y2', H);
+    l.setAttribute('stroke', stroke); l.setAttribute('stroke-width', sw);
+    parent.appendChild(l);
+  };
+  const defs = document.createElementNS(NS, 'defs');
+  const pat  = document.createElementNS(NS, 'pattern');
+  pat.setAttribute('id', 'owGridPat');
+  pat.setAttribute('x', 0); pat.setAttribute('y', 0);
+  pat.setAttribute('width', mesurePx); pat.setAttribute('height', H);
+  pat.setAttribute('patternUnits', 'userSpaceOnUse');
+  for (let x = divPx; x < mesurePx - 0.5; x += divPx) {
+    const isBeat = Math.abs(Math.round(x / beatPx) * beatPx - x) < 0.5;
+    if (!isBeat) mkL(pat, x, 'rgba(160,160,220,0.22)', 0.5);
+  }
+  for (let x = beatPx; x < mesurePx - 0.5; x += beatPx) {
+    mkL(pat, x, 'rgba(110,110,200,0.32)', 0.8);
+  }
+  mkL(pat, 0, 'rgba(70,70,170,0.45)', 1.2);
+  defs.appendChild(pat);
+  svg.appendChild(defs);
+  const rect = document.createElementNS(NS, 'rect');
+  rect.setAttribute('x', 0); rect.setAttribute('y', 0);
+  rect.setAttribute('width', W); rect.setAttribute('height', H);
+  rect.setAttribute('fill', 'url(#owGridPat)');
+  svg.appendChild(rect);
 }
 
 function owShowPrefTab(tab) {
@@ -1660,6 +1752,7 @@ function owCreateReglette() {
 
 function owRedrawReglette() {
   owCreateReglette();
+  owDrawGrid();
 }
 
 function owSetZoom(pct) {
@@ -1688,26 +1781,32 @@ function owUpdateZoom() {
 
   owCreateReglette();
 
-  const regle  = document.getElementById('owRegle');
-  const work2  = document.getElementById('work2');
-  const space  = document.getElementById('space');
+  const regle    = document.getElementById('owRegle');
+  const work2    = document.getElementById('work2');
+  const space    = document.getElementById('space');
   const spaceBkg = document.getElementById('spaceBkg');
+  const gridSvg  = document.getElementById('owGridSvg');
 
   if (scale > 1) {
     const w = Math.round(12960 * scale);
-    regle.style.width  = w + 'px';
-    work2.style.width  = w + 'px';
-    space.style.width  = w + 'px';
+    regle.style.width    = w + 'px';
+    work2.style.width    = w + 'px';
+    space.style.width    = w + 'px';
     spaceBkg.style.width = w + 'px';
+    gridSvg.style.width  = w + 'px';
+    gridSvg.setAttribute('width', w);
   } else {
     regle.style.width    = '12960px';
     work2.style.width    = '12960px';
     space.style.width    = '12960px';
     spaceBkg.style.width = '12960px';
+    gridSvg.style.width  = '12960px';
+    gridSvg.setAttribute('width', 12960);
   }
 
   space.style.transform    = 'scale(' + scale + ',' + scale + ')';
   space.style.transformOrigin = '0 0';
+  owDrawGrid();
 }
 
 // Écouter le mousewheel sur la réglette
