@@ -1062,6 +1062,8 @@ function owRenderGroups() {
     div.className = 'ow-grp' + (grp.id === owActiveGrp ? ' actif' : '');
     div.id = 'grp' + grp.id;
     owApplyGrpStyle(div, grp);
+    div.style.left = (grp.posX || 0) + 'px';
+    div.style.top  = (grp.posY || 0) + 'px';
 
     /* ── Haut : select transformation ── */
     const topDiv = document.createElement('div');
