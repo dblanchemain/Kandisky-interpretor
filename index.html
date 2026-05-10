@@ -1032,6 +1032,9 @@ function owDoPermuter() {
   s2.posY = tmp;
   document.getElementById('permutPopup').style.display = 'none';
   owModified = true;
+  /* Mettre à jour la section active : première par posY */
+  const firstSec = [...owSections].sort((a, b) => a.posY - b.posY)[0];
+  if (firstSec) owActiveSec = firstSec.id;
   owRenderAll();
 }
 
@@ -1382,9 +1385,8 @@ function owGrpGlyph(grp) {
 
 function owRenderGroups() {
   document.querySelectorAll('.ow-grp').forEach(el => el.remove());
-  if (owActiveSec === null) return;
   const space = document.getElementById('space');
-  owGroups.filter(g => g.sectionId === owActiveSec).forEach(grp => {
+  owGroups.forEach(grp => {
     const div = document.createElement('div');
     div.className = 'ow-grp' + (grp.id === owActiveGrp ? ' actif' : '');
     div.id = 'grp' + grp.id;
@@ -1534,7 +1536,8 @@ function owSelectSection(secId) {
 function owBuildSectionList() {
   const div = document.getElementById('owSectionList');
   div.innerHTML = '';
-  owSections.forEach((sec, idx) => {
+  const sorted = [...owSections].sort((a, b) => a.posY - b.posY);
+  sorted.forEach((sec, idx) => {
     const item = document.createElement('div');
     item.className = 'ow-sec-item' + (sec.id === owActiveSec ? ' actif' : '');
     item.id = 'owsi' + sec.id;
