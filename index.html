@@ -595,6 +595,17 @@
   </div>
 </div>
 
+<!-- ════════════════════════ POPUP : Infos groupe (lecture seule) ════════════════════════ -->
+<div id="grpInfoPopup" class="ow-popup" style="top:80px;left:240px;width:310px;">
+  <div id="grpInfoPopupHeader" class="ow-popup-hd">Paramètres du groupe</div>
+  <div class="ow-popup-body" style="padding:8px 12px;font-size:0.82em;max-height:420px;overflow-y:auto;">
+    <div id="grpInfoContent"></div>
+  </div>
+  <div class="ow-popup-foot">
+    <button onclick="document.getElementById('grpInfoPopup').style.display='none'">Fermer</button>
+  </div>
+</div>
+
 <script>
 'use strict';
 // ═══════════════════════════════════════════════
@@ -1326,6 +1337,64 @@ function owSelectGrp(id) {
   const el = document.getElementById('grp' + id);
   if (el) el.classList.add('actif');
   owUpdateInfo();
+  const grp = owGroups.find(g => g.id === id);
+  if (grp) owShowGrpInfo(grp);
+}
+
+function owShowGrpInfo(grp) {
+  const sec  = owSections.find(s => s.id === grp.sectionId);
+  const posS = (grp.posX / OW_BASE_PX).toFixed(2);
+  const b    = v => v ? 'Oui' : 'Non';
+  const rows = [
+    ['Nom',              grp.name],
+    ['Section',          sec ? sec.name : '—'],
+    ['Position',         posS + ' s'],
+    ['Dimensions',       grp.w + ' × ' + grp.h + ' px'],
+    ['Nuance',           grp.nuance || '—'],
+    null,
+    ['Direct',           b(grp.direct)],
+    ['Renversement',     b(grp.renversement)],
+    ['Rétrograde',       b(grp.retrograde)],
+    ['Renv.+Rétrograde', b(grp.renvRetrograde)],
+    null,
+    ['Répétition',       b(grp.repetition) + (grp.repetition ? '  max ' + grp.repetitionMax : '')],
+    ['Transposition',    b(grp.transposition)],
+    null,
+    ['Augm./dim.',       b(grp.augDim) + (grp.augDim ? '  [' + grp.augDimMin + ', ' + grp.augDimMax + ']' : '')],
+    ['Expansion',        b(grp.expansion) + (grp.expansion ? '  [' + grp.expansionMin + ', ' + grp.expansionMax + ']' : '')],
+    null,
+    ['Var. tempo',       b(grp.variationTempo)],
+    ['Var. intensité',   b(grp.variationIntensite)],
+  ];
+  if (grp.posRelDebut) rows.push(['Pos. dép. début', grp.posRelDebutGroupe + ' (' + grp.posRelDebutAvant + ')']);
+  if (grp.posRelFin)   rows.push(['Pos. dép. fin',   grp.posRelFinGroupe   + ' (' + grp.posRelFinAvant   + ')']);
+
+  const content = document.getElementById('grpInfoContent');
+  content.innerHTML = '';
+  const tbl = document.createElement('table');
+  tbl.style.cssText = 'width:100%;border-collapse:collapse;line-height:1.6;';
+  rows.forEach(row => {
+    const tr = document.createElement('tr');
+    if (!row) {
+      const td = document.createElement('td');
+      td.colSpan = 2;
+      td.style.cssText = 'border-top:1px solid #ddd;padding:2px 0;';
+      tr.appendChild(td);
+    } else {
+      const [k, v] = row;
+      const tk = document.createElement('td');
+      tk.style.cssText = 'color:#666;padding:1px 8px 1px 0;white-space:nowrap;vertical-align:top;';
+      tk.textContent = k + ' :';
+      const tv = document.createElement('td');
+      tv.style.cssText = 'font-weight:600;padding:1px 0;';
+      tv.textContent = v;
+      tr.appendChild(tk);
+      tr.appendChild(tv);
+    }
+    tbl.appendChild(tr);
+  });
+  content.appendChild(tbl);
+  document.getElementById('grpInfoPopup').style.display = 'block';
 }
 
 function owUpdateInfo() {
