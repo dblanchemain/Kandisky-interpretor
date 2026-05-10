@@ -1080,12 +1080,7 @@ function owDoPermuter() {
   const s1 = owSections.find(s => s.id === id1);
   const s2 = owSections.find(s => s.id === id2);
   if (!s1 || !s2) return;
-  const dy = s2.posY - s1.posY;
-  /* Déplacer les groupes avec leur section (sectionId inchangé) */
-  owGroups.forEach(g => {
-    if (g.sectionId === id1) g.posY += dy;
-    else if (g.sectionId === id2) g.posY -= dy;
-  });
+  /* Seul l'ordre des sections change — les groupes gardent leurs positions */
   const tmp = s1.posY;
   s1.posY = s2.posY;
   s2.posY = tmp;
