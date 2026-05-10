@@ -568,7 +568,7 @@ function owParseData(txt, label) {
     owNextGrpId = grpId;
     owActiveGrp = null;
     owModified  = false;
-    owActiveSec = owSections.length ? [...owSections].sort((a,b) => a.posY - b.posY)[0].id : null;
+    owActiveSec = owSections.length ? owSections[0].id : null;
     if (label) document.getElementById('owFileLabel').textContent = label;
     owRenderAll();
     owBuildNuancesTable();
@@ -933,7 +933,7 @@ function owSelectSection(secId) {
 function owBuildSectionList() {
   const div = document.getElementById('owSectionList');
   div.innerHTML = '';
-  [...owSections].sort((a,b) => a.posY - b.posY).forEach((sec, idx) => {
+  owSections.forEach((sec, idx) => {
     const item = document.createElement('div');
     item.className = 'ow-sec-item' + (sec.id === owActiveSec ? ' actif' : '');
     item.id = 'owsi' + sec.id;
