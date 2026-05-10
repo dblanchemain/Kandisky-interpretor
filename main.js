@@ -45,7 +45,7 @@ ipcMain.on('toMain', (event, args) => {
           return;
         }
         currentFilePath = result.filePaths[0];
-        win.webContents.send('fromMain', 'owLoaded;' + data);
+        win.webContents.send('fromMain', 'owLoaded;' + currentFilePath + '\n' + data);
       }).catch(err => console.error('interpOpen:', err));
       break;
     }

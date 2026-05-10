@@ -486,12 +486,63 @@ document.getElementById('owFileInput').addEventListener('change', function(e) {
 
 function owParseData(txt, label) {
   try {
-    const d = JSON.parse(txt);
-    owSections = d.sections  || [];
-    owGroups   = d.groups    || [];
-    owNuances  = d.nuances   || owNuances;
-    owNextSecId= d.nextSecId || owSections.length + 1;
-    owNextGrpId= d.nextGrpId || owGroups.length   + 1;
+    const doc  = new DOMParser().parseFromString(txt, 'application/xml');
+    const root = doc.querySelector('openwork');
+    if (!root) throw new Error('Élément <openwork> introuvable');
+    const b = v => v === 'true';
+    const n = (v, def) => v != null && v !== '' ? parseFloat(v) : def;
+    owSections = [];
+    owGroups   = [];
+    let secId  = 1;
+    let grpId  = 1;
+    doc.querySelectorAll('section').forEach(secEl => {
+      const id     = secId++;
+      const grpEls = [...secEl.querySelectorAll('groupe')];
+      const posY   = grpEls.length
+        ? Math.min(...grpEls.map(g => n(g.getAttribute('posY'), 0)))
+        : (secId - 2) * 100 + 20;
+      owSections.push({ id, name: secEl.getAttribute('name') || ('Section ' + id), posY, color: '#4a90d9' });
+      grpEls.forEach(g => {
+        owGroups.push({
+          id: grpId++, name: g.getAttribute('name') || ('Groupe ' + grpId),
+          sectionId: id,
+          posX: n(g.getAttribute('posX'), 0),   posY: n(g.getAttribute('posY'), 0),
+          w:    n(g.getAttribute('w'), 120),     h:    n(g.getAttribute('h'), 60),
+          color: g.getAttribute('color') || '#4a90d9',
+          opacity: n(g.getAttribute('opacity'), 0.45),
+          nuance: '',
+          direct: b(g.getAttribute('direct')),
+          renversement: b(g.getAttribute('renversement')),
+          retrograde:   b(g.getAttribute('retrograde')),
+          renvRetrograde: b(g.getAttribute('renvRetrograde')),
+          repetition: b(g.getAttribute('repetition')),
+          repetitionMax: n(g.getAttribute('repetitionMax'), 2),
+          transposition: b(g.getAttribute('transposition')),
+          augDim: b(g.getAttribute('augDim')),
+          augDimMin: n(g.getAttribute('augDimMin'), -2),
+          augDimMax: n(g.getAttribute('augDimMax'),  2),
+          expansion: b(g.getAttribute('expansion')),
+          expansionMin: n(g.getAttribute('expansionMin'), 0.5),
+          expansionMax: n(g.getAttribute('expansionMax'), 2.0),
+          variationTempo:     b(g.getAttribute('variationTempo')),
+          variationIntensite: b(g.getAttribute('variationIntensite')),
+          posRelDebut:        b(g.getAttribute('posRelDebut')),
+          posRelDebutAvant:   g.getAttribute('posRelDebutAvant')  || '',
+          posRelDebutGroupe:  g.getAttribute('posRelDebutGroupe') || '',
+          posRelFin:          b(g.getAttribute('posRelFin')),
+          posRelFinAvant:     g.getAttribute('posRelFinAvant')    || '',
+          posRelFinGroupe:    g.getAttribute('posRelFinGroupe')   || '',
+          dir: g.getAttribute('dir') || ''
+        });
+      });
+    });
+    /* nuances spécifiques interpretor (bloc optionnel) */
+    const nuanceEls = doc.querySelectorAll('interpretor > nuance');
+    if (nuanceEls.length) {
+      owNuances = [...nuanceEls].map(el => ({ nom: el.getAttribute('nom'), val: n(el.getAttribute('val'), 50) }));
+    }
+    owNextSecId = secId;
+    owNextGrpId = grpId;
     owActiveGrp = null;
     owModified  = false;
     if (label) document.getElementById('owFileLabel').textContent = label;
@@ -501,10 +552,33 @@ function owParseData(txt, label) {
 }
 
 function owSerialise() {
-  return JSON.stringify({
-    sections: owSections, groups: owGroups,
-    nuances: owNuances, nextSecId: owNextSecId, nextGrpId: owNextGrpId
-  }, null, 2);
+  const x = s => (s == null ? '' : String(s))
+    .replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const b = v => v ? 'true' : 'false';
+  const sorted = [...owSections].sort((a, bk) => a.posY - bk.posY);
+  let xml = "<?xml version='1.0' encoding='UTF-8' ?>\n<openwork version='2.1.1'>\n  <partition name=\"\">\n";
+  sorted.forEach(sec => {
+    xml += `    <section name="${x(sec.name)}">\n`;
+    owGroups.filter(g => g.sectionId === sec.id).forEach(grp => {
+      xml += `      <groupe name="${x(grp.name)}"`;
+      xml += ` direct="${b(grp.direct)}" renversement="${b(grp.renversement)}"`;
+      xml += ` retrograde="${b(grp.retrograde)}" renvRetrograde="${b(grp.renvRetrograde)}"`;
+      xml += ` repetition="${b(grp.repetition)}" repetitionMax="${grp.repetitionMax ?? 2}"`;
+      xml += ` transposition="${b(grp.transposition)}"`;
+      xml += ` augDim="${b(grp.augDim)}" augDimMin="${grp.augDimMin ?? -2}" augDimMax="${grp.augDimMax ?? 2}"`;
+      xml += ` expansion="${b(grp.expansion)}" expansionMin="${grp.expansionMin ?? 0.5}" expansionMax="${grp.expansionMax ?? 2.0}"`;
+      xml += ` variationTempo="${b(grp.variationTempo)}" variationIntensite="${b(grp.variationIntensite)}"`;
+      xml += ` posRelDebut="${b(grp.posRelDebut)}" posRelDebutAvant="${x(grp.posRelDebutAvant)}" posRelDebutGroupe="${x(grp.posRelDebutGroupe)}"`;
+      xml += ` posRelFin="${b(grp.posRelFin)}" posRelFinAvant="${x(grp.posRelFinAvant)}" posRelFinGroupe="${x(grp.posRelFinGroupe)}"`;
+      xml += ` dir="${x(grp.dir || '')}"`;
+      xml += ` posX="${grp.posX}" posY="${grp.posY}" w="${grp.w}" h="${grp.h}" color="${x(grp.color)}" opacity="${grp.opacity}"/>\n`;
+    });
+    xml += `    </section>\n`;
+  });
+  xml += `  </partition>\n  <interpretor>\n`;
+  owNuances.forEach(nu => { xml += `    <nuance nom="${x(nu.nom)}" val="${nu.val}"/>\n`; });
+  xml += `  </interpretor>\n</openwork>\n`;
+  return xml;
 }
 
 function owSauvegarder() {
@@ -512,7 +586,7 @@ function owSauvegarder() {
   if (typeof window.api !== 'undefined') {
     window.api.send('toMain', 'owSave;' + (owFilePath || '') + ';' + owSerialise());
   } else {
-    owTelecharger(owFilePath || 'projet.owk', owSerialise());
+    owTelecharger(owFilePath || 'partition.xml', owSerialise());
   }
 }
 
@@ -521,17 +595,17 @@ function owSauvegarderSous() {
   if (typeof window.api !== 'undefined') {
     window.api.send('toMain', 'owSaveAs;' + owSerialise());
   } else {
-    const nom = prompt('Nom du fichier :', owFilePath || 'projet.owk');
+    const nom = prompt('Nom du fichier :', owFilePath || 'partition.xml');
     if (nom) owTelecharger(nom, owSerialise());
   }
 }
 
 function owTelecharger(nom, contenu) {
-  const blob = new Blob([contenu], {type:'application/json'});
+  const blob = new Blob([contenu], {type:'application/xml'});
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
   a.href = url;
-  a.download = nom.endsWith('.owk') ? nom : nom + '.owk';
+  a.download = nom.endsWith('.xml') ? nom : nom + '.xml';
   a.click();
   URL.revokeObjectURL(url);
   owModified = false;
@@ -944,9 +1018,14 @@ if (typeof window.api !== 'undefined') {
         owModified = false;
         document.getElementById('owFileLabel').textContent = rest.split(/[\\/]/).at(-1);
         break;
-      case 'owLoaded':
-        owParseData(rest, rest.split(/[\\/]/).at(-1));
+      case 'owLoaded': {
+        const nl   = rest.indexOf('\n');
+        const fp   = nl > -1 ? rest.substring(0, nl) : '';
+        const xml  = nl > -1 ? rest.substring(nl + 1) : rest;
+        owFilePath = fp;
+        owParseData(xml, fp.split(/[\\/]/).at(-1) || 'partition.xml');
         break;
+      }
     }
   });
 }
