@@ -1730,7 +1730,11 @@ function buildObjSvg(o, imgBasePath) {
 function drawObjets(grpXml, grpDiv, imgBasePath) {
   const parser = new DOMParser();
   const doc    = parser.parseFromString(grpXml, 'application/xml');
-  if (doc.querySelector('parsererror')) { console.warn('[drawObjets] parseerror XML'); return; }
+  if (doc.querySelector('parsererror')) {
+    console.warn('[drawObjets] parseerror XML, début:', grpXml.substring(0, 120));
+    console.warn('[drawObjets] erreur:', doc.querySelector('parsererror').textContent.substring(0, 200));
+    return;
+  }
   let ctnX=0, ctnY=0, ctnW=0, ctnH=0;
   for (const el of doc.querySelectorAll('objet')) {
     const clsEl = el.querySelector('class');
