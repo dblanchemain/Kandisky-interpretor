@@ -2194,6 +2194,7 @@ if (typeof window.api !== 'undefined') {
     const sep  = data.indexOf(';');
     const cmd  = sep > -1 ? data.substring(0, sep) : data;
     const rest = sep > -1 ? data.substring(sep + 1) : '';
+    console.log('[fromMain] cmd='+cmd);
     switch (cmd) {
       case 'owSaved':
         owFilePath = rest;
