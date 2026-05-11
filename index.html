@@ -1734,7 +1734,7 @@ function drawObjets(grpXml, grpDiv, imgBasePath) {
   let ctnX=0, ctnY=0, ctnW=0, ctnH=0;
   for (const el of doc.querySelectorAll('objet')) {
     const clsEl = el.querySelector('class');
-    if (clsEl && parseInt(clsEl.getAttribute('value'))||0 === 4) {
+    if (clsEl && parseInt(clsEl.getAttribute('value')) === 4) {
       const o = parseObjetEl(el);
       ctnX=o.posX; ctnY=o.posY;
       ctnW=o.bkgWidth||o.width; ctnH=o.bkgHeight||o.height;
