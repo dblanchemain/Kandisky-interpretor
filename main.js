@@ -4,6 +4,7 @@ const fs   = require('fs');
 
 let win = null;
 let currentFilePath = '';
+let interpCurrentDir = '';
 
 function createWindow() {
   win = new BrowserWindow({
@@ -44,9 +45,25 @@ ipcMain.on('toMain', (event, args) => {
           dialog.showErrorBox('Fichier invalide', 'Ce fichier n\'est pas une partition OpenWork valide.');
           return;
         }
-        currentFilePath = result.filePaths[0];
+        currentFilePath  = result.filePaths[0];
+        interpCurrentDir = path.dirname(currentFilePath);
         win.webContents.send('fromMain', 'owLoaded;' + currentFilePath + '\n' + data);
       }).catch(err => console.error('interpOpen:', err));
+      break;
+    }
+
+    case 'interpLoadGrp': {
+      const semi2   = rest.indexOf(';');
+      const grpId   = semi2 > -1 ? rest.substring(0, semi2) : rest;
+      const grpName = semi2 > -1 ? rest.substring(semi2 + 1) : '';
+      if (!grpName || !interpCurrentDir) break;
+      const grpFile = path.join(interpCurrentDir, 'Groupes', grpName);
+      const imgDir  = path.join(interpCurrentDir, 'Images');
+      try {
+        const xml = fs.readFileSync(grpFile, 'utf-8');
+        const b64 = Buffer.from(xml, 'utf-8').toString('base64');
+        win.webContents.send('fromMain', 'interpGrpLoaded;' + grpId + ';' + imgDir + ';' + b64);
+      } catch(e) { console.error('interpLoadGrp:', grpName, e.message); }
       break;
     }
 
