@@ -18,7 +18,6 @@ function createWindow() {
   });
   win.loadFile('index.html');
   win.removeMenu();
-  win.webContents.openDevTools();
   win.on('closed', () => { win = null; });
 }
 
@@ -59,17 +58,16 @@ ipcMain.on('toMain', (event, args) => {
       const grpId   = p1 > -1 ? rest.substring(0, p1) : rest;
       const grpName = p1 > -1 ? (p2 > -1 ? rest.substring(p1 + 1, p2) : rest.substring(p1 + 1)) : '';
       const grpDir  = p2 > -1 ? rest.substring(p2 + 1) : '';
-      console.log('[interpLoadGrp] id='+grpId+' name='+grpName+' dir='+grpDir+' currentDir='+interpCurrentDir);
       if (!grpName) break;
       const candidates = [];
       if (grpDir) candidates.push(path.join(grpDir, grpName));
       if (interpCurrentDir) candidates.push(path.join(interpCurrentDir, 'Groupes', grpName));
       let xmlFound = null;
       for (const f of candidates) {
-        try { xmlFound = fs.readFileSync(f, 'utf-8'); console.log('[interpLoadGrp] lu:', f); break; }
-        catch(e) { console.log('[interpLoadGrp] absent:', f); }
+        try { xmlFound = fs.readFileSync(f, 'utf-8'); break; }
+        catch(e) {}
       }
-      if (!xmlFound) { console.error('[interpLoadGrp] introuvable', grpName); break; }
+      if (!xmlFound) break;
       const imgDir = interpCurrentDir ? path.join(interpCurrentDir, 'Images') : (grpDir || '');
       const b64 = Buffer.from(xmlFound, 'utf-8').toString('base64');
       win.webContents.send('fromMain', 'interpGrpLoaded;' + grpId + ';' + imgDir + ';' + b64);

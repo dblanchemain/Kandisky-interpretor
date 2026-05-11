@@ -1732,10 +1732,7 @@ function drawObjets(grpXml, grpDiv, imgBasePath) {
   // Échapper les & non encodés (ex: chemins avec '&' dans les valeurs d'attributs)
   const safeXml = grpXml.replace(/&(?!amp;|lt;|gt;|quot;|apos;|#\d+;|#x[\da-fA-F]+;)/g, '&amp;');
   const doc    = parser.parseFromString(safeXml, 'application/xml');
-  if (doc.querySelector('parsererror')) {
-    console.warn('[drawObjets] parseerror XML:', doc.querySelector('parsererror').textContent.substring(0, 200));
-    return;
-  }
+  if (doc.querySelector('parsererror')) return;
   let ctnX=0, ctnY=0, ctnW=0, ctnH=0;
   for (const el of doc.querySelectorAll('objet')) {
     const clsEl = el.querySelector('class');
@@ -1746,8 +1743,7 @@ function drawObjets(grpXml, grpDiv, imgBasePath) {
       break;
     }
   }
-  console.log('[drawObjets] ctn='+ctnW+'x'+ctnH+' divW='+grpDiv.offsetWidth+' objets='+doc.querySelectorAll('objet').length);
-  if (!ctnW || !ctnH) { console.warn('[drawObjets] conteneur class=4 introuvable ou 0x0'); return; }
+  if (!ctnW || !ctnH) return;
   const divW = grpDiv.offsetWidth  || parseFloat(grpDiv.style.width)  || 120;
   const divH = grpDiv.offsetHeight || parseFloat(grpDiv.style.height) || 60;
   const sx   = divW / ctnW;
@@ -1756,10 +1752,9 @@ function drawObjets(grpXml, grpDiv, imgBasePath) {
   let drawn = 0;
   for (const el of doc.querySelectorAll('objet')) {
     const o     = parseObjetEl(el);
-    console.log('[drawObjets] objet id='+o.id+' class='+o.class+' type='+o.type+' bkgW='+o.bkgWidth+' bkgH='+o.bkgHeight);
     if (o.class === 4 || o.class === 0) continue;
     const shape = buildObjSvg(o, imgBasePath);
-    if (!shape) { console.log('[drawObjets] shape vide type='+o.type); continue; }
+    if (!shape) continue;
     let bkg = '';
     if (!o.bkgTrp) {
       const op = Math.round(o.bkgOpacity*255).toString(16).padStart(2,'0');
@@ -1776,7 +1771,6 @@ function drawObjets(grpXml, grpDiv, imgBasePath) {
     grpDiv.appendChild(div);
     drawn++;
   }
-  console.log('[drawObjets] dessinés='+drawn);
 }
 
 let owActiveSec = null;
@@ -2203,7 +2197,6 @@ if (typeof window.api !== 'undefined') {
     const sep  = data.indexOf(';');
     const cmd  = sep > -1 ? data.substring(0, sep) : data;
     const rest = sep > -1 ? data.substring(sep + 1) : '';
-    console.log('[fromMain] cmd='+cmd);
     switch (cmd) {
       case 'owSaved':
         owFilePath = rest;
@@ -2224,13 +2217,12 @@ if (typeof window.api !== 'undefined') {
         const grpId   = parseInt(parts[0]);
         const imgBase = parts[1] || '';
         const xmlB64  = parts[2] || '';
-        console.log('[interpGrpLoaded] grpId='+grpId+' imgBase='+imgBase+' b64len='+xmlB64.length);
-        if (!xmlB64) { console.warn('[interpGrpLoaded] xmlB64 vide'); break; }
+        if (!xmlB64) break;
         const grpXml = new TextDecoder('utf-8').decode(Uint8Array.from(atob(xmlB64), c => c.charCodeAt(0)));
         const grp    = owGroups.find(g => g.id === grpId);
-        if (!grp) { console.warn('[interpGrpLoaded] groupe introuvable id='+grpId); break; }
+        if (!grp) break;
         const grpDiv = document.getElementById('grp' + grpId);
-        if (!grpDiv) { console.warn('[interpGrpLoaded] div introuvable #grp'+grpId); break; }
+        if (!grpDiv) break;
         interpGrpData[grp.id] = { xml: grpXml, imgBase };
         drawObjets(grpXml, grpDiv, imgBase);
         break;
