@@ -53,17 +53,24 @@ ipcMain.on('toMain', (event, args) => {
     }
 
     case 'interpLoadGrp': {
-      const semi2   = rest.indexOf(';');
-      const grpId   = semi2 > -1 ? rest.substring(0, semi2) : rest;
-      const grpName = semi2 > -1 ? rest.substring(semi2 + 1) : '';
-      if (!grpName || !interpCurrentDir) break;
-      const grpFile = path.join(interpCurrentDir, 'Groupes', grpName);
-      const imgDir  = path.join(interpCurrentDir, 'Images');
-      try {
-        const xml = fs.readFileSync(grpFile, 'utf-8');
-        const b64 = Buffer.from(xml, 'utf-8').toString('base64');
-        win.webContents.send('fromMain', 'interpGrpLoaded;' + grpId + ';' + imgDir + ';' + b64);
-      } catch(e) { console.error('interpLoadGrp:', grpName, e.message); }
+      const p1      = rest.indexOf(';');
+      const p2      = p1 > -1 ? rest.indexOf(';', p1 + 1) : -1;
+      const grpId   = p1 > -1 ? rest.substring(0, p1) : rest;
+      const grpName = p1 > -1 ? (p2 > -1 ? rest.substring(p1 + 1, p2) : rest.substring(p1 + 1)) : '';
+      const grpDir  = p2 > -1 ? rest.substring(p2 + 1) : '';
+      if (!grpName) break;
+      // Essayer d'abord grpDir (chemin kandiskyscore), puis Groupes/ relatif à la partition
+      const candidates = [];
+      if (grpDir) candidates.push(path.join(grpDir, grpName));
+      if (interpCurrentDir) candidates.push(path.join(interpCurrentDir, 'Groupes', grpName));
+      let xmlFound = null;
+      for (const f of candidates) {
+        try { xmlFound = fs.readFileSync(f, 'utf-8'); break; } catch(e) {}
+      }
+      if (!xmlFound) { console.error('interpLoadGrp: fichier introuvable', grpName, candidates); break; }
+      const imgDir = interpCurrentDir ? path.join(interpCurrentDir, 'Images') : (grpDir || '');
+      const b64 = Buffer.from(xmlFound, 'utf-8').toString('base64');
+      win.webContents.send('fromMain', 'interpGrpLoaded;' + grpId + ';' + imgDir + ';' + b64);
       break;
     }
 

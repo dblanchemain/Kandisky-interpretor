@@ -940,7 +940,7 @@ function owParseData(txt, label) {
     // Charger les XMLs de groupe pour drawObjets
     if (typeof window.api !== 'undefined') {
       owGroups.forEach(grp => {
-        if (grp.name) window.api.send('toMain', `interpLoadGrp;${grp.id};${grp.name}`);
+        if (grp.name) window.api.send('toMain', `interpLoadGrp;${grp.id};${grp.name};${grp.dir||''}`);
       });
     }
   } catch(err) { alert('Erreur de chargement : ' + err.message); }
