@@ -1748,11 +1748,13 @@ function drawObjets(grpXml, grpDiv, imgBasePath) {
   const sx   = divW / ctnW;
   const sy   = divH / ctnH;
   grpDiv.querySelectorAll('.ow-drawn-obj').forEach(e => e.remove());
+  let drawn = 0;
   for (const el of doc.querySelectorAll('objet')) {
     const o     = parseObjetEl(el);
+    console.log('[drawObjets] objet id='+o.id+' class='+o.class+' type='+o.type+' bkgW='+o.bkgWidth+' bkgH='+o.bkgHeight);
     if (o.class === 4 || o.class === 0) continue;
     const shape = buildObjSvg(o, imgBasePath);
-    if (!shape) continue;
+    if (!shape) { console.log('[drawObjets] shape vide type='+o.type); continue; }
     let bkg = '';
     if (!o.bkgTrp) {
       const op = Math.round(o.bkgOpacity*255).toString(16).padStart(2,'0');
@@ -1767,7 +1769,9 @@ function drawObjets(grpXml, grpDiv, imgBasePath) {
     div.style.cssText = `position:absolute;left:${rx}px;top:${ry}px;pointer-events:none;`;
     div.innerHTML = `<svg width="${w}" height="${h}" viewBox="0 0 ${o.bkgWidth} ${o.bkgHeight}" xmlns="http://www.w3.org/2000/svg">${bkg}${shape}</svg>`;
     grpDiv.appendChild(div);
+    drawn++;
   }
+  console.log('[drawObjets] dessinés='+drawn);
 }
 
 let owActiveSec = null;
@@ -2217,7 +2221,7 @@ if (typeof window.api !== 'undefined') {
         const xmlB64  = parts[2] || '';
         console.log('[interpGrpLoaded] grpId='+grpId+' imgBase='+imgBase+' b64len='+xmlB64.length);
         if (!xmlB64) { console.warn('[interpGrpLoaded] xmlB64 vide'); break; }
-        const grpXml = atob(xmlB64);
+        const grpXml = new TextDecoder('utf-8').decode(Uint8Array.from(atob(xmlB64), c => c.charCodeAt(0)));
         const grp    = owGroups.find(g => g.id === grpId);
         if (!grp) { console.warn('[interpGrpLoaded] groupe introuvable id='+grpId); break; }
         const grpDiv = document.getElementById('grp' + grpId);
