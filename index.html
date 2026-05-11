@@ -1729,10 +1729,11 @@ function buildObjSvg(o, imgBasePath) {
 
 function drawObjets(grpXml, grpDiv, imgBasePath) {
   const parser = new DOMParser();
-  const doc    = parser.parseFromString(grpXml, 'application/xml');
+  // Échapper les & non encodés (ex: chemins avec '&' dans les valeurs d'attributs)
+  const safeXml = grpXml.replace(/&(?!amp;|lt;|gt;|quot;|apos;|#\d+;|#x[\da-fA-F]+;)/g, '&amp;');
+  const doc    = parser.parseFromString(safeXml, 'application/xml');
   if (doc.querySelector('parsererror')) {
-    console.warn('[drawObjets] parseerror XML, début:', grpXml.substring(0, 120));
-    console.warn('[drawObjets] erreur:', doc.querySelector('parsererror').textContent.substring(0, 200));
+    console.warn('[drawObjets] parseerror XML:', doc.querySelector('parsererror').textContent.substring(0, 200));
     return;
   }
   let ctnX=0, ctnY=0, ctnW=0, ctnH=0;
