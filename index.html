@@ -1730,7 +1730,7 @@ function buildObjSvg(o, imgBasePath) {
 function drawObjets(grpXml, grpDiv, imgBasePath) {
   const parser = new DOMParser();
   const doc    = parser.parseFromString(grpXml, 'application/xml');
-  if (doc.querySelector('parsererror')) return;
+  if (doc.querySelector('parsererror')) { console.warn('[drawObjets] parseerror XML'); return; }
   let ctnX=0, ctnY=0, ctnW=0, ctnH=0;
   for (const el of doc.querySelectorAll('objet')) {
     const clsEl = el.querySelector('class');
@@ -1741,7 +1741,8 @@ function drawObjets(grpXml, grpDiv, imgBasePath) {
       break;
     }
   }
-  if (!ctnW || !ctnH) return;
+  console.log('[drawObjets] ctn='+ctnW+'x'+ctnH+' divW='+grpDiv.offsetWidth+' objets='+doc.querySelectorAll('objet').length);
+  if (!ctnW || !ctnH) { console.warn('[drawObjets] conteneur class=4 introuvable ou 0x0'); return; }
   const divW = grpDiv.offsetWidth  || parseFloat(grpDiv.style.width)  || 120;
   const divH = grpDiv.offsetHeight || parseFloat(grpDiv.style.height) || 60;
   const sx   = divW / ctnW;
@@ -2213,12 +2214,13 @@ if (typeof window.api !== 'undefined') {
         const grpId   = parseInt(parts[0]);
         const imgBase = parts[1] || '';
         const xmlB64  = parts[2] || '';
-        if (!xmlB64) break;
+        console.log('[interpGrpLoaded] grpId='+grpId+' imgBase='+imgBase+' b64len='+xmlB64.length);
+        if (!xmlB64) { console.warn('[interpGrpLoaded] xmlB64 vide'); break; }
         const grpXml = atob(xmlB64);
         const grp    = owGroups.find(g => g.id === grpId);
-        if (!grp) break;
+        if (!grp) { console.warn('[interpGrpLoaded] groupe introuvable id='+grpId); break; }
         const grpDiv = document.getElementById('grp' + grpId);
-        if (!grpDiv) break;
+        if (!grpDiv) { console.warn('[interpGrpLoaded] div introuvable #grp'+grpId); break; }
         interpGrpData[grp.id] = { xml: grpXml, imgBase };
         drawObjets(grpXml, grpDiv, imgBase);
         break;
