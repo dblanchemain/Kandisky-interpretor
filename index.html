@@ -1668,6 +1668,18 @@ function parseObjetEl(el) {
 }
 
 function buildObjSvg(o, imgBasePath) {
+  // Symboles (class=3) : rendu dédié
+  if (o.class === 3) {
+    const lineTypes = new Set([1,2,3,19,20,21,22,23,24,25,26,27,28,63,64,65,66,67,68,69,70,71,72]);
+    if (lineTypes.has(o.type)) {
+      const x2 = isFinite(o.x2) && o.x2 ? o.x2 : o.bkgWidth;
+      const y2 = isFinite(o.y2) ? o.y2 : 0;
+      return `<line x1="0" y1="0" x2="${x2}" y2="${y2}" stroke="${o.objColor}" stroke-width="1.5" stroke-linecap="round"/>`;
+    }
+    return `<rect x="0" y="0" width="${Math.max(1,o.bkgWidth)}" height="${Math.max(1,o.bkgHeight)}" fill="${o.objColor}" opacity="0.85"/>`;
+  }
+
+  // Objets audio (class=1) : formes géométriques
   const sc = `scale(${o.scaleX},${o.scaleY}) translate(${o.margeG},${o.margeH})`;
   switch (o.type) {
     case 1: {
