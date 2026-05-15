@@ -1513,8 +1513,6 @@ function owRenderGroups() {
       sel.addEventListener('mousedown', e => { e.stopPropagation(); owSelectGrp(grp.id); });
       sel.addEventListener('change', e => {
         grp.dir = e.target.value;
-        const img = div.querySelector('.ow-grp-img');
-        if (img) img.src = owGrpGlyph(grp);
         owModified = true;
       });
       topDiv.appendChild(sel);
@@ -1546,14 +1544,9 @@ function owRenderGroups() {
     }
     div.appendChild(augDiv);
 
-    /* ── Centre : image + label ── */
+    /* ── Centre : label ── */
     const centerDiv = document.createElement('div');
     centerDiv.className = 'ow-grp-center';
-    const img = document.createElement('img');
-    img.className = 'ow-grp-img';
-    img.src = owGrpGlyph(grp);
-    img.draggable = false;
-    centerDiv.appendChild(img);
     const lbl = document.createElement('span');
     lbl.className = 'ow-grp-lbl';
     lbl.textContent = grp.name;
