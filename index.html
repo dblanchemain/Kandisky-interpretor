@@ -1901,9 +1901,9 @@ function drawObjets(grpXml, grpDiv, imgBasePath) {
     const div = document.createElement('div');
     div.className = 'ow-drawn-obj';
     div.style.cssText = `position:absolute;left:${rx}px;top:${ry}px;pointer-events:none;`;
-    // class=3 : taille naturelle du SVG (comme kandiskyscore), overflow:visible pour les débordements
+    // class=3 : scale(sx sy) dans un <g>, overflow:visible pour les débordements (translate/rotate étendus)
     div.innerHTML = o.class === 3
-      ? `<svg width="${o.bkgWidth}" height="${o.bkgHeight}" overflow="visible" xmlns="http://www.w3.org/2000/svg">${bkg}${shape}</svg>`
+      ? `<svg width="${w}" height="${h}" overflow="visible" xmlns="http://www.w3.org/2000/svg"><g transform="scale(${sx} ${sy})">${bkg}${shape}</g></svg>`
       : `<svg width="${w}" height="${h}" viewBox="0 0 ${o.bkgWidth} ${o.bkgHeight}" xmlns="http://www.w3.org/2000/svg">${bkg}${shape}</svg>`;
     grpDiv.appendChild(div);
     drawn++;
