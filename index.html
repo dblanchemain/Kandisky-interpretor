@@ -1673,9 +1673,9 @@ function owTrRenversement(objs) {
   for (let i = 1; i < objs.length; i++)
     rc.push(rc[i-1] - (centers[i] - centers[i-1]));
   const result = objs.map((o, i) => ({...o, posY: rc[i] - (o.bkgHeight || 0) / 2}));
-  console.log('[renversement] entrée:', objs.map(o=>({id:o.id||o.nom,posY:o.posY,bkgH:o.bkgHeight,ctr:o.posY+(o.bkgHeight||0)/2})));
-  console.log('[renversement] hm=', hm, 'rc=', rc);
-  console.log('[renversement] sortie:', result.map(o=>({id:o.id||o.nom,posY:o.posY,bkgH:o.bkgHeight})));
+  objs.forEach((o,i) => console.log(`  entrée[${i}] nom=${o.nom} posY=${o.posY} bkgH=${o.bkgHeight} centre=${centers[i].toFixed(2)}`));
+  console.log('  hm=', hm.toFixed(2), ' rc=', rc.map(v=>v.toFixed(2)));
+  result.forEach((o,i) => console.log(`  sortie[${i}] nom=${o.nom} posY=${o.posY.toFixed(2)} bkgH=${o.bkgHeight} centre=${(o.posY+(o.bkgHeight||0)/2).toFixed(2)}`));
   return result;
 }
 
