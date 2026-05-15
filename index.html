@@ -1664,29 +1664,12 @@ function owTrDirect(objs)       { return objs.map(o => ({...o})); }
 
 function owTrRenversement(objs) {
   if (!objs.length) return [];
-  console.log('=== owTrRenversement entrée ===');
-  objs.forEach((o,i) => console.log(`  entrée[${i}] id=${o.id} posX=${o.posX} posY=${o.posY} bkgH=${o.bkgHeight}`));
-  const centers = objs.map(o => o.posY + (o.bkgHeight || 0) / 2);
-  console.log('  centres:', centers.map((c,i)=>`[${i}]=${c.toFixed(3)}`).join(' '));
-  const hm = (Math.min(...centers) + Math.max(...centers)) / 2;
-  console.log('  hm (axe):', hm.toFixed(3));
-  const rc = [hm];
+  const posYs = objs.map(o => o.posY);
+  const hm = (Math.min(...posYs) + Math.max(...posYs)) / 2;
+  const rp = [hm];
   for (let i = 1; i < objs.length; i++)
-    rc.push(rc[i-1] - (centers[i] - centers[i-1]));
-  console.log('  rc (centres sortie):', rc.map((v,i)=>`[${i}]=${v.toFixed(3)}`).join(' '));
-  const result = objs.map((o, i) => ({...o, posY: rc[i] - (o.bkgHeight || 0) / 2}));
-  console.log('=== owTrRenversement sortie ===');
-  result.forEach((o,i) => {
-    const c = o.posY + (o.bkgHeight||0)/2;
-    console.log(`  sortie[${i}] id=${o.id} posY=${o.posY.toFixed(3)} centre=${c.toFixed(3)} bas=${(o.posY+(o.bkgHeight||0)).toFixed(3)} bkgH=${o.bkgHeight}`);
-  });
-  for (let i = 1; i < result.length; i++) {
-    const ci = result[i].posY + (result[i].bkgHeight||0)/2;
-    const cj = result[i-1].posY + (result[i-1].bkgHeight||0)/2;
-    const pi = result[i].posY, pj = result[i-1].posY;
-    console.log(`  intervalle[${i-1}→${i}] posY=${( pi-pj).toFixed(3)}  centre=${( ci-cj).toFixed(3)}`);
-  }
-  return result;
+    rp.push(rp[i-1] - (posYs[i] - posYs[i-1]));
+  return objs.map((o, i) => ({...o, posY: rp[i]}));
 }
 
 function owTrRetrograde(objs) {
