@@ -348,7 +348,7 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
+      justify-content: flex-end;
       overflow: hidden;
       padding: 0;
     }
@@ -1745,7 +1745,7 @@ function drawObjets(grpXml, grpDiv, imgBasePath) {
   let drawn = 0;
   for (const el of doc.querySelectorAll('objet')) {
     const o     = parseObjetEl(el);
-    if (o.class === 4 || o.class === 0 || o.type === 23) continue;
+    if (o.class === 4 || o.class === 0) continue;
     const shape = buildObjSvg(o, imgBasePath);
     if (!shape) continue;
     let bkg = '';
