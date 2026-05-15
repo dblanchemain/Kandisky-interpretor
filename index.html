@@ -291,11 +291,7 @@
       cursor: move;
       z-index: 5;
       min-width: 60px;
-      min-height: 50px;
-      display: grid;
-      grid-template-rows: auto 1fr auto;
-      grid-template-columns: auto 1fr;
-      grid-template-areas: "top top" "aug center" "bot bot";
+      min-height: 20px;
       overflow: visible;
       box-sizing: border-box;
     }
@@ -303,63 +299,45 @@
       outline: 2px solid #e04400;
       box-shadow: 0 0 4px rgba(224,68,0,0.5);
     }
-    .ow-grp-top {
-      grid-area: top;
-      display: flex;
-      justify-content: center;
-      border-bottom: 1px solid rgba(0,0,0,0.12);
-      background: rgba(255,255,255,0.25);
-    }
-    .ow-grp-top select {
-      font-size: 0.75em;
-      width: 100%;
+    .ow-grp-trigger {
+      position: absolute;
+      top: 3px;
+      left: 50%;
+      transform: translateX(-50%);
       cursor: pointer;
-      background: transparent;
-      border: none;
-      padding: 1px 2px;
-      outline: none;
-    }
-    .ow-grp-aug {
-      grid-area: aug;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 0 2px;
-      border-right: 1px solid rgba(0,0,0,0.12);
-      gap: 1px;
-    }
-    .ow-grp-aug-lbl {
       font-size: 0.72em;
-      pointer-events: none;
-      line-height: 1;
+      background: rgba(255,255,255,0.8);
+      border: 1px solid rgba(0,0,0,0.25);
+      border-radius: 3px;
+      padding: 1px 6px;
+      white-space: nowrap;
+      z-index: 6;
+      user-select: none;
+      pointer-events: auto;
     }
-    .ow-grp-aug input {
-      width: 34px;
+    .ow-grp-trigger:hover { background: rgba(255,255,255,0.97); }
+    .ow-grp-aug-val {
+      position: absolute;
+      left: 3px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 0.72em;
+      color: #333;
+      background: rgba(255,255,255,0.75);
+      border-radius: 2px;
+      padding: 1px 4px;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+    .ow-grp-exp-val {
+      position: absolute;
+      top: calc(100% + 2px);
+      left: 0;
+      right: 0;
       font-size: 0.72em;
       text-align: center;
-      border: 1px solid rgba(0,0,0,0.2);
-      background: rgba(255,255,255,0.6);
-      padding: 1px;
-      cursor: ns-resize;
-    }
-    .ow-grp-center {
-      grid-area: center;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: flex-start;
-      overflow: hidden;
-      padding: 0;
-    }
-    .ow-grp-img {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
+      color: #333;
       pointer-events: none;
-      display: block;
-      flex: 1 1 0;
-      min-height: 0;
     }
     .ow-grp-lbl {
       position: absolute;
@@ -373,6 +351,7 @@
       line-height: 1.1;
       padding: 0 2px;
     }
+    .ow-grp-lbl.with-exp { top: calc(100% + 22px); }
     .ow-grp-resize {
       position: absolute;
       right: 0;
@@ -386,29 +365,13 @@
     .ow-grp.actif .ow-grp-resize {
       background: linear-gradient(135deg, transparent 40%, rgba(224,68,0,0.7) 40%);
     }
-    .ow-grp-bot {
-      grid-area: bot;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 3px;
-      border-top: 1px solid rgba(0,0,0,0.12);
-      background: rgba(255,255,255,0.25);
-      padding: 1px 3px;
-    }
-    .ow-grp-bot-lbl {
-      font-size: 0.72em;
-      pointer-events: none;
-      white-space: nowrap;
-    }
-    .ow-grp-bot input {
-      width: 50px;
-      font-size: 0.72em;
-      text-align: center;
-      border: 1px solid rgba(0,0,0,0.2);
-      background: rgba(255,255,255,0.6);
-      padding: 1px;
-    }
+    /* ── Popup lecture groupe ── */
+    #grpPlayPopup label { font-size: 0.85em; width: 80px; display: inline-block; }
+    #grpPlayPopup .play-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    #grpPlayPopup select, #grpPlayPopup input[type=number] { font-size: 0.85em; flex: 1; }
+    #grpPlayPopup input[type=number]:disabled { opacity: 0.4; }
+    #grpPlayPopup .play-foot { display:flex; justify-content:flex-end; gap:8px; padding:6px 12px; border-top:1px solid #ddd; }
+    #grpPlayPopup .play-foot button.ok { background:#4a90d9; color:#fff; border:none; border-radius:3px; padding:3px 14px; cursor:pointer; }
 
     /* ── Popups communs ── */
     .ow-popup {
@@ -670,6 +633,29 @@
   </div>
   <div class="ow-popup-foot">
     <button onclick="document.getElementById('grpInfoPopup').style.display='none'">Fermer</button>
+  </div>
+</div>
+
+<!-- ════════════════════════ POPUP : Paramètres de lecture groupe ════════════════════════ -->
+<div id="grpPlayPopup" class="ow-popup" style="width:270px;">
+  <div class="ow-popup-hd" id="grpPlayPopupHd">Paramètres de lecture</div>
+  <div class="ow-popup-body" style="padding:10px 12px 4px;">
+    <div class="play-row">
+      <label>Lecture</label>
+      <select id="grpPlayLecture"></select>
+    </div>
+    <div class="play-row">
+      <label>Augm.</label>
+      <input type="number" id="grpPlayAugm" step="0.5"/>
+    </div>
+    <div class="play-row">
+      <label>Expansion</label>
+      <input type="number" id="grpPlayExpansion" step="0.1"/>
+    </div>
+  </div>
+  <div class="play-foot">
+    <button onclick="owGrpPlayCancel()">Annuler</button>
+    <button class="ok" onclick="owGrpPlayValidate()">Valider</button>
   </div>
 </div>
 
@@ -1500,61 +1486,32 @@ function owRenderGroups() {
     div.style.left = (grp.posX || 0) + 'px';
     div.style.top  = (grp.posY || 0) + 'px';
 
-    /* ── Haut : select transformation ── */
-    const topDiv = document.createElement('div');
-    topDiv.className = 'ow-grp-top';
-    const allowed = [];
-    if (grp.direct)         allowed.push(['direct',        'Direct']);
-    if (grp.renversement)   allowed.push(['renversement',  'Renversement']);
-    if (grp.retrograde)     allowed.push(['retrograde',    'Rétrograde']);
-    if (grp.renvRetrograde) allowed.push(['renvRetrograde','Renv.+Rétrograde']);
-    if (allowed.length) {
-      if (!allowed.find(a => a[0] === grp.dir)) grp.dir = allowed[0][0];
-      const sel = document.createElement('select');
-      allowed.forEach(([val, lbl]) => sel.appendChild(new Option(lbl, val)));
-      sel.value = grp.dir;
-      sel.addEventListener('mousedown', e => { e.stopPropagation(); owSelectGrp(grp.id); });
-      sel.addEventListener('change', e => {
-        grp.dir = e.target.value;
-        owModified = true;
-      });
-      topDiv.appendChild(sel);
-    } else {
-      topDiv.style.display = 'none';
-    }
-    div.appendChild(topDiv);
+    /* ── Haut : bouton déclencheur du popup ── */
+    const triggerBtn = document.createElement('div');
+    triggerBtn.className = 'ow-grp-trigger';
+    triggerBtn.textContent = owDirLabel(grp.dir);
+    triggerBtn.addEventListener('mousedown', e => e.stopPropagation());
+    triggerBtn.addEventListener('click', e => { e.stopPropagation(); owOpenGrpPlayPopup(grp, div); });
+    div.appendChild(triggerBtn);
 
-    /* ── Gauche : augmentation verticale ── */
-    const augDiv = document.createElement('div');
-    augDiv.className = 'ow-grp-aug';
+    /* ── Gauche : valeur augmentation (absolue, mi-hauteur) ── */
     if (grp.augDim) {
-      const lbl = document.createElement('span');
-      lbl.className = 'ow-grp-aug-lbl';
-      lbl.textContent = 'Augm.';
-      augDiv.appendChild(lbl);
-      const inp = document.createElement('input');
-      inp.type = 'number';
-      inp.min = grp.augDimMin ?? -2;
-      inp.max = grp.augDimMax ??  2;
-      inp.step = 0.5;
-      inp.value = grp.augDimVal ?? 0;
-      inp.title = 'Augmentation verticale';
-      inp.addEventListener('mousedown', e => { e.stopPropagation(); owSelectGrp(grp.id); });
-      inp.addEventListener('input', e => { grp.augDimVal = parseFloat(e.target.value); owModified = true; });
-      augDiv.appendChild(inp);
-    } else {
-      augDiv.style.display = 'none';
+      const augVal = document.createElement('div');
+      augVal.className = 'ow-grp-aug-val';
+      augVal.textContent = owFmtAugm(grp.augDimVal ?? 0);
+      div.appendChild(augVal);
     }
-    div.appendChild(augDiv);
 
-    /* ── Centre : contenu ── */
-    const centerDiv = document.createElement('div');
-    centerDiv.className = 'ow-grp-center';
-    div.appendChild(centerDiv);
+    /* ── Expansion : au-dessus du label ── */
+    const expVal = document.createElement('div');
+    expVal.className = 'ow-grp-exp-val';
+    expVal.style.display = grp.expansion ? 'block' : 'none';
+    if (grp.expansion) expVal.textContent = '×' + (grp.expansionVal ?? 1.0).toFixed(2);
+    div.appendChild(expVal);
 
-    /* ── Label : sous le cadre (position absolue) ── */
+    /* ── Label : sous le cadre ── */
     const lbl = document.createElement('span');
-    lbl.className = 'ow-grp-lbl';
+    lbl.className = 'ow-grp-lbl' + (grp.expansion ? ' with-exp' : '');
     lbl.textContent = grp.name;
     lbl.style.pointerEvents = 'auto';
     lbl.addEventListener('contextmenu', e => {
@@ -1564,29 +1521,6 @@ function owRenderGroups() {
       owShowGrpInfo(grp);
     });
     div.appendChild(lbl);
-
-    /* ── Bas : expansion temporelle ── */
-    const botDiv = document.createElement('div');
-    botDiv.className = 'ow-grp-bot';
-    if (grp.expansion) {
-      const lbl = document.createElement('span');
-      lbl.className = 'ow-grp-bot-lbl';
-      lbl.textContent = 'Expans.';
-      botDiv.appendChild(lbl);
-      const inp = document.createElement('input');
-      inp.type = 'number';
-      inp.min = grp.expansionMin ?? 0.5;
-      inp.max = grp.expansionMax ?? 2.0;
-      inp.step = 0.1;
-      inp.value = grp.expansionVal ?? 1.0;
-      inp.title = 'Expansion temporelle';
-      inp.addEventListener('mousedown', e => { e.stopPropagation(); owSelectGrp(grp.id); });
-      inp.addEventListener('input', e => { grp.expansionVal = parseFloat(e.target.value); owModified = true; });
-      botDiv.appendChild(inp);
-    } else {
-      botDiv.style.display = 'none';
-    }
-    div.appendChild(botDiv);
 
     /* ── Poignée de redimensionnement ── */
     const handle = document.createElement('div');
@@ -1612,6 +1546,13 @@ function owRenderGroups() {
   });
 }
 
+function owDirLabel(dir) {
+  return dir === 'renversement'   ? 'Renversement'    :
+         dir === 'retrograde'     ? 'Rétrograde'       :
+         dir === 'renvRetrograde' ? 'Renv.+Rétrograde' : 'Direct';
+}
+function owFmtAugm(v) { return (v >= 0 ? '+' : '') + v; }
+
 function owApplyGrpStyle(el, grp) {
   el.style.width           = grp.w + 'px';
   el.style.height          = grp.h + 'px';
@@ -1619,6 +1560,78 @@ function owApplyGrpStyle(el, grp) {
   el.style.backgroundColor = owHexRgba(grp.color || '#c8dcff', grp.opacity ?? 0.45);
   const lbl = el.querySelector('.ow-grp-lbl');
   if (lbl) lbl.textContent = grp.name;
+  const trig = el.querySelector('.ow-grp-trigger');
+  if (trig) trig.textContent = owDirLabel(grp.dir);
+  const augVal = el.querySelector('.ow-grp-aug-val');
+  if (augVal) augVal.textContent = owFmtAugm(grp.augDimVal ?? 0);
+  const expVal = el.querySelector('.ow-grp-exp-val');
+  if (expVal) {
+    expVal.style.display = grp.expansion ? 'block' : 'none';
+    if (grp.expansion) expVal.textContent = '×' + (grp.expansionVal ?? 1.0).toFixed(2);
+  }
+}
+
+let grpPlayEditId = null;
+
+function owOpenGrpPlayPopup(grp, divEl) {
+  grpPlayEditId = grp.id;
+
+  // Lecture options
+  const sel = document.getElementById('grpPlayLecture');
+  sel.innerHTML = '';
+  const opts = [];
+  if (grp.direct)         opts.push(['direct',        'Direct']);
+  if (grp.renversement)   opts.push(['renversement',  'Renversement']);
+  if (grp.retrograde)     opts.push(['retrograde',    'Rétrograde']);
+  if (grp.renvRetrograde) opts.push(['renvRetrograde','Renv.+Rétrograde']);
+  if (!opts.length)       opts.push(['direct', 'Direct']);
+  opts.forEach(([v, l]) => sel.appendChild(new Option(l, v)));
+  sel.value = grp.dir || opts[0][0];
+
+  // Augm
+  const augInp = document.getElementById('grpPlayAugm');
+  augInp.disabled = !grp.augDim;
+  augInp.min  = grp.augDimMin ?? -2;
+  augInp.max  = grp.augDimMax ??  2;
+  augInp.step = 0.5;
+  augInp.value = grp.augDimVal ?? 0;
+
+  // Expansion
+  const expInp = document.getElementById('grpPlayExpansion');
+  expInp.disabled = !grp.expansion;
+  expInp.min  = grp.expansionMin ?? 0.5;
+  expInp.max  = grp.expansionMax ?? 2.0;
+  expInp.step = 0.1;
+  expInp.value = grp.expansionVal ?? 1.0;
+
+  // Position popup sous le cadre (coordonnées page)
+  const popup = document.getElementById('grpPlayPopup');
+  const rect  = divEl.getBoundingClientRect();
+  popup.style.left = Math.max(4, rect.left + window.scrollX) + 'px';
+  popup.style.top  = (rect.bottom + window.scrollY + 6) + 'px';
+  popup.style.display = 'block';
+}
+
+function owGrpPlayCancel() {
+  document.getElementById('grpPlayPopup').style.display = 'none';
+  grpPlayEditId = null;
+}
+
+function owGrpPlayValidate() {
+  if (grpPlayEditId === null) return;
+  const grp = owGroups.find(g => g.id === grpPlayEditId);
+  if (!grp) { owGrpPlayCancel(); return; }
+
+  grp.dir = document.getElementById('grpPlayLecture').value;
+  if (grp.augDim)    grp.augDimVal    = parseFloat(document.getElementById('grpPlayAugm').value)      || 0;
+  if (grp.expansion) grp.expansionVal = parseFloat(document.getElementById('grpPlayExpansion').value) || 1.0;
+
+  owModified = true;
+  document.getElementById('grpPlayPopup').style.display = 'none';
+  grpPlayEditId = null;
+
+  const div = document.getElementById('grp' + grp.id);
+  if (div) owApplyGrpStyle(div, grp);
 }
 
 function owHexRgba(hex, a) {
