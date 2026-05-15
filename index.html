@@ -1752,7 +1752,7 @@ function drawObjets(grpXml, grpDiv, imgBasePath) {
   let drawn = 0;
   for (const el of doc.querySelectorAll('objet')) {
     const o     = parseObjetEl(el);
-    if (o.class === 4 || o.class === 0) continue;
+    if (o.class === 4 || o.class === 0 || o.type === 23) continue;
     const shape = buildObjSvg(o, imgBasePath);
     if (!shape) continue;
     let bkg = '';
