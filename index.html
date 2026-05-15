@@ -1661,6 +1661,7 @@ function parseObjetEl(el) {
     rotate:  vf('rotation', vf('rotate')),
     r:  vf('r',10), cx:vf('cx',10), cy:vf('cy',10), rx:vf('rx',20), ry:vf('ry',10),
     x1: vf('x1'),   y1:vf('y1'),    x2:vf('x2'),    y2:vf('y2'),
+    x3: vf('x3'),   y3:vf('y3'),
     cp1x:vf('cp1x',25), cp1y:vf('cp1y',30),
     cp2x:vf('cp2x',45), cp2y:vf('cp2y',30),
     img: v('imag','')
@@ -1793,6 +1794,55 @@ function buildSymbolSvg(o) {
       paths += `<path d="m 10.167981,15.973817 v 0.148562 c -0.02099,0.04898 -0.09601,0.07238 -0.2182617,0.07238 C 5.6722328,15.352847 2.827939,14.213761 1.4160494,12.773795 0.60102532,11.928078 0.19372322,11.257589 0.19372322,10.76238 c 0,-0.8685722 0.68758146,-1.6342943 2.06305888,-2.3047839 C 3.6323122,7.7871071 5.1569537,7.2842801 6.8307073,6.9490081 8.5044593,6.61379 10.106596,6.179477 11.63706,5.6461765 13.167578,5.1166849 14.039897,4.5375635 14.254015,3.9166492 13.083107,3.2499689 11.648446,2.7280416 9.9497193,2.3547312 9.6170768,2.2556897 9.2342253,1.882379 8.8019484,1.2385545 8.6104428,0.96809488 8.5149528,0.69377148 8.5149528,0.41950255 V 0.2709402 c 0.02624,-0.0489766 0.074504,-0.0761858 0.1437605,-0.0761858 1.4614707,0.32759902 2.6819607,0.68572668 3.6611547,1.081893 0.97956,0.3999755 1.840493,0.9790423 2.582797,1.7447641 0.860566,0.8952377 1.291058,1.6647691 1.291058,2.312403 0,0.838098 -0.663708,1.5809645 -1.991493,2.2285436 -1.327365,0.643825 -2.810138,1.1352775 -4.447532,1.470496 -1.6373932,0.335217 -3.2274082,0.754293 -4.7689445,1.2647379 -1.5418505,0.506635 -2.4696264,1.059092 -2.7836945,1.653396 1.7486764,0.891374 3.9006673,1.588528 6.4566543,2.083791 0.168419,0.02721 0.3237221,0.11428 0.4674821,0.262839 0.143759,0.152373 0.2927655,0.331408 0.4475445,0.54092 0.1547758,0.209511 0.2570887,0.339027 0.3069325,0.392357 0.1909786,0.297126 0.2869946,0.544782 0.2869946,0.742866" transform="translate(0,${i*14})"/>`;
     }
     return g(paths);
+  }
+
+  // Types géométriques : accolade (19), crochet (20), variantes (71, 72)
+  // Le tracé est calculé depuis les coordonnées x2/y2 (point B) et x3/y3 (courbure)
+  if (o.type === 19 || o.type === 71) {
+    const glyph19 = GLYPHS[19];
+    if (!glyph19) return '';
+    const ax = 0, ay = 0;
+    const bx = (o.x2 != null && isFinite(o.x2)) ? o.x2 : 0;
+    const by = (o.y2 != null && isFinite(o.y2)) ? o.y2 : 60;
+    const cx = (o.x3 != null && isFinite(o.x3)) ? o.x3 : (ax + bx) / 2 - 10;
+    const cy = (o.y3 != null && isFinite(o.y3)) ? o.y3 : (ay + by) / 2;
+    const dx = bx - ax, dy = by - ay;
+    const L = Math.hypot(dx, dy) || 60;
+    const ux = dx / L, uy = dy / L;
+    const syVal = L / 26.10;
+    const midx = (ax + bx) / 2, midy = (ay + by) / 2;
+    const perp = (cx - midx) * (-uy) + (cy - midy) * ux;
+    let sxVal = perp / 8.46;
+    if (Math.abs(sxVal) < 0.2) sxVal = sxVal < 0 ? -0.2 : 0.2;
+    const minX = Math.min(ax, bx, cx), minY = Math.min(ay, by, cy);
+    const lax = ax - minX, lay = ay - minY;
+    const ma = uy * sxVal, mb = -ux * sxVal, mc = ux * syVal, md = uy * syVal;
+    const me = lax - 9.5 * uy * sxVal - 0.58 * ux * syVal;
+    const mf = lay + 9.5 * ux * sxVal - 0.58 * uy * syVal;
+    return `<g fill="${o.objColor}" stroke="none" transform="matrix(${ma},${mb},${mc},${md},${me},${mf})">${glyph19}</g>`;
+  }
+  if (o.type === 20 || o.type === 72) {
+    const glyph20 = GLYPHS[20];
+    if (!glyph20) return '';
+    const ax = 0, ay = 0;
+    const bx = (o.x2 != null && isFinite(o.x2)) ? o.x2 : 0;
+    const by = (o.y2 != null && isFinite(o.y2)) ? o.y2 : 60;
+    const dx = bx - ax, dy = by - ay;
+    const L = Math.hypot(dx, dy) || 60;
+    const ux = dx / L, uy = dy / L;
+    const syVal = L / 26.10;
+    const cx = (o.x3 != null && isFinite(o.x3)) ? o.x3 : (ax + bx) / 2 - 4;
+    const cy = (o.y3 != null && isFinite(o.y3)) ? o.y3 : (ay + by) / 2;
+    const midx = (ax + bx) / 2, midy = (ay + by) / 2;
+    const perp = (cx - midx) * (-uy) + (cy - midy) * ux;
+    let sxVal = perp / 8.46;
+    if (Math.abs(sxVal) < 0.1) sxVal = sxVal < 0 ? -0.1 : 0.1;
+    const minX = Math.min(ax, bx, cx), minY = Math.min(ay, by, cy);
+    const lax = ax - minX, lay = ay - minY;
+    const ma = uy * sxVal, mb = -ux * sxVal, mc = ux * syVal, md = uy * syVal;
+    const me = lax - 9.5 * uy * sxVal - 0.58 * ux * syVal;
+    const mf = lay + 9.5 * ux * sxVal - 0.58 * uy * syVal;
+    return `<g fill="${o.objColor}" stroke="${o.objColor}" stroke-width="${o.objBorderW||1}" transform="matrix(${ma},${mb},${mc},${md},${me},${mf})">${glyph20}</g>`;
   }
 
   // Types avec glyphes statiques
