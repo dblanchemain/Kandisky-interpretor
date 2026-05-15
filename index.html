@@ -1665,11 +1665,11 @@ function owTrDirect(objs)       { return objs.map(o => ({...o})); }
 function owTrRenversement(objs) {
   if (!objs.length) return [];
   const centers = objs.map(o => o.posY + (o.bkgHeight || 0) / 2);
-  const hm = (Math.min(...centers) + Math.max(...centers)) / 2;
-  const rc = [hm];
+  const hm = (Math.min(...objs.map(o => o.posY)) + Math.max(...objs.map(o => o.posY))) / 2;
+  const rp = [hm];
   for (let i = 1; i < objs.length; i++)
-    rc.push(rc[i-1] - (centers[i] - centers[i-1]));
-  return objs.map((o, i) => ({...o, posY: rc[i] - (o.bkgHeight || 0) / 2}));
+    rp.push(rp[i-1] - (centers[i] - centers[i-1]));
+  return objs.map((o, i) => ({...o, posY: rp[i]}));
 }
 
 function owTrRetrograde(objs) {
