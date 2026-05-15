@@ -1662,14 +1662,21 @@ function owParseGrpXml(grpId) {
 
 function owTrDirect(objs)       { return objs.map(o => ({...o})); }
 
+function owPitchRef(o) {
+  switch (o.type) {
+    case 13: return o.posY + 25;
+    default:  return o.posY;
+  }
+}
+
 function owTrRenversement(objs) {
   if (!objs.length) return [];
-  const posYs = objs.map(o => o.posY);
-  const hm = (Math.min(...posYs) + Math.max(...posYs)) / 2;
+  const refs = objs.map(o => owPitchRef(o));
+  const hm = (Math.min(...refs) + Math.max(...refs)) / 2;
   const rp = [hm];
   for (let i = 1; i < objs.length; i++)
-    rp.push(rp[i-1] - (posYs[i] - posYs[i-1]));
-  return objs.map((o, i) => ({...o, posY: rp[i]}));
+    rp.push(rp[i-1] - (refs[i] - refs[i-1]));
+  return objs.map((o, i) => ({...o, posY: rp[i] - (owPitchRef(o) - o.posY)}));
 }
 
 function owTrRetrograde(objs) {
