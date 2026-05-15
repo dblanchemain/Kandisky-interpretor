@@ -348,7 +348,7 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: flex-end;
+      justify-content: flex-start;
       overflow: hidden;
       padding: 0;
     }
@@ -362,13 +362,16 @@
       min-height: 0;
     }
     .ow-grp-lbl {
+      position: absolute;
+      top: calc(100% + 10px);
+      left: 0;
+      right: 0;
       pointer-events: none;
       font-size: 0.82em;
       text-align: center;
       word-break: break-word;
       line-height: 1.1;
-      padding: 1px 2px;
-      flex-shrink: 0;
+      padding: 0 2px;
     }
     .ow-grp-resize {
       position: absolute;
@@ -1544,9 +1547,12 @@ function owRenderGroups() {
     }
     div.appendChild(augDiv);
 
-    /* ── Centre : label ── */
+    /* ── Centre : contenu ── */
     const centerDiv = document.createElement('div');
     centerDiv.className = 'ow-grp-center';
+    div.appendChild(centerDiv);
+
+    /* ── Label : sous le cadre (position absolue) ── */
     const lbl = document.createElement('span');
     lbl.className = 'ow-grp-lbl';
     lbl.textContent = grp.name;
@@ -1557,8 +1563,7 @@ function owRenderGroups() {
       owSelectGrp(grp.id);
       owShowGrpInfo(grp);
     });
-    centerDiv.appendChild(lbl);
-    div.appendChild(centerDiv);
+    div.appendChild(lbl);
 
     /* ── Bas : expansion temporelle ── */
     const botDiv = document.createElement('div');
