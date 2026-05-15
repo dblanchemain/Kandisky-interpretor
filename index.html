@@ -678,6 +678,7 @@ let owActiveGrp  = null;
 let owFilePath   = null;
 let owImagesDir  = '';
 let interpGrpData = {};   // {grpId: {xml, imgBase}} — cache XMLs de groupe
+let owTableObjets = {};  // {grpId: [{posX,posY,...}]} — objets audio transformés par groupe
 let owModified   = false;
 let owTempoPoints = [];   // [{id,X,Y}]  X=pixels, Y=0..100  bpm=240-Y/0.4167
 let owGainPoints  = [];   // [{id,X,Y}]  gain=(100-Y)*0.05
@@ -1631,7 +1632,143 @@ function owGrpPlayValidate() {
   grpPlayEditId = null;
 
   const div = document.getElementById('grp' + grp.id);
-  if (div) owApplyGrpStyle(div, grp);
+  if (div) {
+    owApplyGrpStyle(div, grp);
+    owComputeGrpObjets(grp);
+    owDrawTransformOverlay(grp, div);
+  }
+}
+
+// ═══════════════════════════════════════════════
+//  TRANSFORMATIONS DES OBJETS AUDIO
+// ═══════════════════════════════════════════════
+
+function owParseGrpXml(grpId) {
+  const data = interpGrpData[grpId];
+  if (!data) return null;
+  const safeXml = data.xml.replace(/&(?!amp;|lt;|gt;|quot;|apos;|#\d+;|#x[\da-fA-F]+;)/g, '&amp;');
+  const doc = new DOMParser().parseFromString(safeXml, 'application/xml');
+  if (doc.querySelector('parsererror')) return null;
+  let ctn = null;
+  const audio = [];
+  for (const el of doc.querySelectorAll('objet')) {
+    const o = parseObjetEl(el);
+    if (o.class === 4 && !ctn) ctn = {ctnX:o.posX, ctnY:o.posY, ctnW:o.bkgWidth, ctnH:o.bkgHeight};
+    if (o.class === 1) audio.push(o);
+  }
+  if (!ctn) return null;
+  audio.sort((a, b) => a.posX - b.posX);
+  return {ctn, audio};
+}
+
+function owTrDirect(objs)       { return objs.map(o => ({...o})); }
+
+function owTrRenversement(objs) {
+  if (!objs.length) return [];
+  const ys = objs.map(o => o.posY);
+  const hm = (Math.min(...ys) + Math.max(...ys)) / 2;
+  const res = [{...objs[0], posY: hm}];
+  for (let i = 1; i < objs.length; i++) {
+    res.push({...objs[i], posY: res[i-1].posY - (objs[i].posY - objs[i-1].posY)});
+  }
+  return res;
+}
+
+function owTrRetrograde(objs) {
+  if (objs.length <= 1) return objs.map(o => ({...o}));
+  const n = objs.length;
+  const startX = objs[0].posX;
+  const intervals = [];
+  for (let i = 1; i < n; i++) intervals.push(objs[i].posX - objs[i-1].posX);
+  const revInt = [...intervals].reverse();
+  const res = [];
+  let x = startX;
+  for (let i = 0; i < n; i++) {
+    res.push({...objs[n - 1 - i], posX: x});
+    if (i < n - 1) x += revInt[i];
+  }
+  return res;
+}
+
+function owTrAugm(objs, val) {
+  return objs.map(o => ({...o, posY: o.posY - val}));  // val>0 monte (Y décroît à l'écran)
+}
+
+function owTrExpansion(objs, factor) {
+  if (objs.length <= 1) return objs.map(o => ({...o}));
+  const startX = objs[0].posX;
+  const res = [{...objs[0]}];
+  for (let i = 1; i < objs.length; i++) {
+    res.push({...objs[i], posX: res[i-1].posX + (objs[i].posX - objs[i-1].posX) * factor});
+  }
+  return res;
+}
+
+function owComputeGrpObjets(grp) {
+  const parsed = owParseGrpXml(grp.id);
+  if (!parsed) { grp.owTableObjets = []; owTableObjets[grp.id] = []; return []; }
+  let objs = parsed.audio;
+
+  switch (grp.dir) {
+    case 'renversement':   objs = owTrRenversement(objs);                      break;
+    case 'retrograde':     objs = owTrRetrograde(objs);                        break;
+    case 'renvRetrograde': objs = owTrRenversement(owTrRetrograde(objs));      break;
+    default:               objs = owTrDirect(objs);                            break;
+  }
+  if (grp.augDim    && grp.augDimVal)                         objs = owTrAugm(objs, grp.augDimVal);
+  if (grp.expansion && grp.expansionVal && grp.expansionVal !== 1.0) objs = owTrExpansion(objs, grp.expansionVal);
+
+  grp.owTableObjets = objs;
+  owTableObjets[grp.id] = objs;
+  return objs;
+}
+
+function owDrawTransformOverlay(grp, grpDiv) {
+  grpDiv.querySelectorAll('.ow-tr-marker').forEach(e => e.remove());
+  const objs = grp.owTableObjets;
+  if (!objs || !objs.length) return;
+
+  const parsed = owParseGrpXml(grp.id);
+  if (!parsed) return;
+  const {ctn} = parsed;
+
+  // Bounds des objets transformés
+  const minY = Math.min(...objs.map(o => o.posY));
+  const maxY = Math.max(...objs.map(o => o.posY + (o.bkgHeight || 0)));
+  const maxX = Math.max(...objs.map(o => o.posX + (o.bkgWidth  || 0)));
+
+  // Adapter le container de rendu si nécessaire
+  const newCtnY = Math.min(ctn.ctnY, minY);
+  const newCtnH = Math.max(ctn.ctnH, maxY - newCtnY);
+  const newCtnW = Math.max(ctn.ctnW, maxX - ctn.ctnX);
+
+  // Adapter la taille du div (grp.w / grp.h) proportionnellement
+  const newGrpW = Math.round(grp.w * newCtnW / ctn.ctnW);
+  const newGrpH = Math.round(grp.h * newCtnH / ctn.ctnH);
+  if (newGrpW !== grp.w || newGrpH !== grp.h) {
+    grp.w = newGrpW;
+    grp.h = newGrpH;
+    owApplyGrpStyle(grpDiv, grp);
+    owModified = true;
+  }
+
+  const divW = parseFloat(grpDiv.style.width)  || grp.w;
+  const divH = parseFloat(grpDiv.style.height) || grp.h;
+  const sx   = divW / newCtnW;
+  const sy   = divH / newCtnH;
+
+  objs.forEach(o => {
+    const rx = (o.posX  - ctn.ctnX) * sx;
+    const ry = (o.posY  - newCtnY)  * sy;
+    const w  = Math.max(3, (o.bkgWidth  || 8) * sx);
+    const h  = Math.max(3, (o.bkgHeight || 8) * sy);
+    const m  = document.createElement('div');
+    m.className = 'ow-tr-marker';
+    m.style.cssText = `position:absolute;left:${rx}px;top:${ry}px;width:${w}px;height:${h}px;`
+      + `border:2px solid rgba(210,60,0,0.9);background:rgba(210,60,0,0.18);`
+      + `box-sizing:border-box;pointer-events:none;border-radius:2px;`;
+    grpDiv.appendChild(m);
+  });
 }
 
 function owHexRgba(hex, a) {
