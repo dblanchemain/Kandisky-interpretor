@@ -1667,12 +1667,10 @@ function owTrRenversement(objs) {
   if (!objs.length) return [];
   const centers = objs.map(o => o.posY + (o.bkgHeight || 0) / 2);
   const hm = (Math.min(...centers) + Math.max(...centers)) / 2;
-  const res = [{...objs[0], posY: hm - (objs[0].bkgHeight || 0) / 2}];
-  for (let i = 1; i < objs.length; i++) {
-    const cInterval = centers[i] - centers[i-1];
-    res.push({...objs[i], posY: res[i-1].posY - cInterval});
-  }
-  return res;
+  const rc = [hm];
+  for (let i = 1; i < objs.length; i++)
+    rc.push(rc[i-1] - (centers[i] - centers[i-1]));
+  return objs.map((o, i) => ({...o, posY: rc[i] - (o.bkgHeight || 0) / 2}));
 }
 
 function owTrRetrograde(objs) {
