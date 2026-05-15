@@ -1622,6 +1622,8 @@ function owGrpPlayValidate() {
   if (grpPlayEditId === null) return;
   const grp = owGroups.find(g => g.id === grpPlayEditId);
   if (!grp) { owGrpPlayCancel(); return; }
+  console.log('[validate] grpId=', grpPlayEditId, 'dir=', document.getElementById('grpPlayLecture').value);
+  console.log('[validate] interpGrpData keys=', Object.keys(interpGrpData));
 
   grp.dir = document.getElementById('grpPlayLecture').value;
   if (grp.augDim)    grp.augDimVal    = parseFloat(document.getElementById('grpPlayAugm').value)      || 0;
@@ -1709,6 +1711,7 @@ function owTrExpansion(objs, factor) {
 
 function owComputeGrpObjets(grp) {
   const parsed = owParseGrpXml(grp.id);
+  console.log('[computeGrpObjets] grp.id=', grp.id, 'parsed=', parsed ? 'ok' : 'null');
   if (!parsed) { grp.owTableObjets = []; owTableObjets[grp.id] = []; return []; }
   let objs = parsed.audio;
 
