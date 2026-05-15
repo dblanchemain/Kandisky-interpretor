@@ -1670,7 +1670,11 @@ function owTrRenversement(objs) {
   const rc = [hm];
   for (let i = 1; i < objs.length; i++)
     rc.push(rc[i-1] - (centers[i] - centers[i-1]));
-  return objs.map((o, i) => ({...o, posY: rc[i] - (o.bkgHeight || 0) / 2}));
+  const result = objs.map((o, i) => ({...o, posY: rc[i] - (o.bkgHeight || 0) / 2}));
+  console.log('[renversement] entrée:', objs.map(o=>({id:o.id||o.nom,posY:o.posY,bkgH:o.bkgHeight,ctr:o.posY+(o.bkgHeight||0)/2})));
+  console.log('[renversement] hm=', hm, 'rc=', rc);
+  console.log('[renversement] sortie:', result.map(o=>({id:o.id||o.nom,posY:o.posY,bkgH:o.bkgHeight})));
+  return result;
 }
 
 function owTrRetrograde(objs) {
