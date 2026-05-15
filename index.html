@@ -1622,9 +1622,6 @@ function owGrpPlayValidate() {
   if (grpPlayEditId === null) return;
   const grp = owGroups.find(g => g.id === grpPlayEditId);
   if (!grp) { owGrpPlayCancel(); return; }
-  console.log('[validate] grpId=', grpPlayEditId, 'dir=', document.getElementById('grpPlayLecture').value);
-  console.log('[validate] interpGrpData keys=', Object.keys(interpGrpData));
-
   grp.dir = document.getElementById('grpPlayLecture').value;
   if (grp.augDim)    grp.augDimVal    = parseFloat(document.getElementById('grpPlayAugm').value)      || 0;
   if (grp.expansion) grp.expansionVal = parseFloat(document.getElementById('grpPlayExpansion').value) || 1.0;
@@ -1672,11 +1669,7 @@ function owTrRenversement(objs) {
   const rc = [hm];
   for (let i = 1; i < objs.length; i++)
     rc.push(rc[i-1] - (centers[i] - centers[i-1]));
-  const result = objs.map((o, i) => ({...o, posY: rc[i] - (o.bkgHeight || 0) / 2}));
-  objs.forEach((o,i) => console.log(`  entrée[${i}] nom=${o.nom} posY=${o.posY} bkgH=${o.bkgHeight} centre=${centers[i].toFixed(2)}`));
-  console.log('  hm=', hm.toFixed(2), ' rc=', rc.map(v=>v.toFixed(2)));
-  result.forEach((o,i) => console.log(`  sortie[${i}] nom=${o.nom} posY=${o.posY.toFixed(2)} bkgH=${o.bkgHeight} centre=${(o.posY+(o.bkgHeight||0)/2).toFixed(2)}`));
-  return result;
+  return objs.map((o, i) => ({...o, posY: rc[i]}));
 }
 
 function owTrRetrograde(objs) {
@@ -1711,7 +1704,6 @@ function owTrExpansion(objs, factor) {
 
 function owComputeGrpObjets(grp) {
   const parsed = owParseGrpXml(grp.id);
-  console.log('[computeGrpObjets] grp.id=', grp.id, 'parsed=', parsed ? 'ok' : 'null');
   if (!parsed) { grp.owTableObjets = []; owTableObjets[grp.id] = []; return []; }
   let objs = parsed.audio;
 
