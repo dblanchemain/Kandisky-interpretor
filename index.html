@@ -1676,18 +1676,11 @@ function owTrRenversement(objs) {
 
 function owTrRetrograde(objs) {
   if (objs.length <= 1) return objs.map(o => ({...o}));
-  const n = objs.length;
-  const startX = objs[0].posX;
-  const intervals = [];
-  for (let i = 1; i < n; i++) intervals.push(objs[i].posX - objs[i-1].posX);
-  const revInt = [...intervals].reverse();
-  const res = [];
-  let x = startX;
-  for (let i = 0; i < n; i++) {
-    res.push({...objs[n - 1 - i], posX: x});
-    if (i < n - 1) x += revInt[i];
-  }
-  return res;
+  const minX     = Math.min(...objs.map(o => o.posX));
+  const maxRight = Math.max(...objs.map(o => o.posX + (o.bkgWidth || 0)));
+  return objs
+    .map(o => ({...o, posX: (minX + maxRight) - (o.posX + (o.bkgWidth || 0))}))
+    .sort((a, b) => a.posX - b.posX);
 }
 
 function owTrAugm(objs, val) {
