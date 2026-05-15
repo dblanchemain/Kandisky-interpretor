@@ -1724,50 +1724,50 @@ function owComputeGrpObjets(grp) {
 }
 
 function owDrawTransformOverlay(grp, grpDiv) {
+  // Supprimer les anciens objets audio et marqueurs
+  grpDiv.querySelectorAll('.ow-drawn-obj[data-obj-class="1"]').forEach(e => e.remove());
   grpDiv.querySelectorAll('.ow-tr-marker').forEach(e => e.remove());
+
   const objs = grp.owTableObjets;
   if (!objs || !objs.length) return;
 
   const parsed = owParseGrpXml(grp.id);
   if (!parsed) return;
   const {ctn} = parsed;
+  const imgBase = interpGrpData[grp.id]?.imgBase || '';
 
-  // Bounds des objets transformés
-  const minY = Math.min(...objs.map(o => o.posY));
-  const maxY = Math.max(...objs.map(o => o.posY + (o.bkgHeight || 0)));
-  const maxX = Math.max(...objs.map(o => o.posX + (o.bkgWidth  || 0)));
-
-  // Adapter le container de rendu si nécessaire
-  const newCtnY = Math.min(ctn.ctnY, minY);
-  const newCtnH = Math.max(ctn.ctnH, maxY - newCtnY);
-  const newCtnW = Math.max(ctn.ctnW, maxX - ctn.ctnX);
-
-  // Adapter la taille du div (grp.w / grp.h) proportionnellement
-  const newGrpW = Math.round(grp.w * newCtnW / ctn.ctnW);
-  const newGrpH = Math.round(grp.h * newCtnH / ctn.ctnH);
-  if (newGrpW !== grp.w || newGrpH !== grp.h) {
-    grp.w = newGrpW;
-    grp.h = newGrpH;
+  // Adapter la hauteur du cadre si les objets transformés débordent vers le bas
+  const maxObjY = Math.max(...objs.map(o => o.posY + (o.bkgHeight || 0)));
+  const overflow = maxObjY - (ctn.ctnY + ctn.ctnH);
+  if (overflow > 0) {
+    grp.h = Math.round(grp.h + overflow * (grp.h / ctn.ctnH));
     owApplyGrpStyle(grpDiv, grp);
     owModified = true;
   }
 
   const divW = parseFloat(grpDiv.style.width)  || grp.w;
   const divH = parseFloat(grpDiv.style.height) || grp.h;
-  const sx   = divW / newCtnW;
-  const sy   = divH / newCtnH;
+  const sx   = divW / ctn.ctnW;
+  const sy   = divH / ctn.ctnH;
 
   objs.forEach(o => {
-    const rx = (o.posX  - ctn.ctnX) * sx;
-    const ry = (o.posY  - newCtnY)  * sy;
-    const w  = Math.max(3, (o.bkgWidth  || 8) * sx);
-    const h  = Math.max(3, (o.bkgHeight || 8) * sy);
-    const m  = document.createElement('div');
-    m.className = 'ow-tr-marker';
-    m.style.cssText = `position:absolute;left:${rx}px;top:${ry}px;width:${w}px;height:${h}px;`
-      + `border:2px solid rgba(210,60,0,0.9);background:rgba(210,60,0,0.18);`
-      + `box-sizing:border-box;pointer-events:none;border-radius:2px;`;
-    grpDiv.appendChild(m);
+    const shape = buildObjSvg(o, imgBase);
+    if (!shape) return;
+    let bkg = '';
+    if (!o.bkgTrp) {
+      const op = Math.round(o.bkgOpacity * 255).toString(16).padStart(2, '0');
+      bkg = `<rect x="0" y="0" width="${o.bkgWidth}" height="${o.bkgHeight}" fill="${o.bkgColor}${op}"/>`;
+    }
+    const rx = (o.posX - ctn.ctnX) * sx;
+    const ry = (o.posY - ctn.ctnY) * sy;
+    const w  = Math.max(1, o.bkgWidth  * sx);
+    const h  = Math.max(1, o.bkgHeight * sy);
+    const d  = document.createElement('div');
+    d.className = 'ow-drawn-obj';
+    d.dataset.objClass = '1';
+    d.style.cssText = `position:absolute;left:${rx}px;top:${ry}px;pointer-events:none;`;
+    d.innerHTML = `<svg width="${w}" height="${h}" viewBox="0 0 ${o.bkgWidth} ${o.bkgHeight}" xmlns="http://www.w3.org/2000/svg">${bkg}${shape}</svg>`;
+    grpDiv.appendChild(d);
   });
 }
 
@@ -2164,6 +2164,7 @@ function drawObjets(grpXml, grpDiv, imgBasePath) {
     const h  = Math.max(1, o.bkgHeight * sy);
     const div = document.createElement('div');
     div.className = 'ow-drawn-obj';
+    div.dataset.objClass = o.class;
     div.style.cssText = `position:absolute;left:${rx}px;top:${ry}px;pointer-events:none;`;
     // class=3 : scale(sx sy) dans un <g>, overflow:visible pour les débordements (translate/rotate étendus)
     div.innerHTML = o.class === 3
