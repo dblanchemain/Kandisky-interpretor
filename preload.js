@@ -10,4 +10,8 @@ contextBridge.exposeInMainWorld('api', {
   listLayouts:    ()     => ipcRenderer.invoke('spatListLayouts'),
   readLayoutJSON: (name) => ipcRenderer.invoke('spatReadLayout', name),
   getSpatPaths:   ()     => ipcRenderer.invoke('spatGetPaths'),
+
+  // Audios
+  readAudioFile:  (partitionPath, filename)              => ipcRenderer.invoke('audiosReadFile', partitionPath, filename),
+  saveAudioFile:  (partitionPath, subfolder, filename, data) => ipcRenderer.invoke('audiosSaveFile', partitionPath, subfolder, filename, data),
 });

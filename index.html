@@ -1883,6 +1883,7 @@ function owGrpPlayValidate() {
     owApplyGrpStyle(div, grp);
     owComputeGrpObjets(grp);
     owDrawTransformOverlay(grp, div);
+    if (grp.transposition) owMiseANiveauAudio(grp).catch(e => console.error('[Audio]', e));
   }
 }
 
@@ -2052,6 +2053,80 @@ function owComputeGrpObjets(grp) {
   return objs;
 }
 
+// ─── Encodage WAV 16 bits PCM ────────────────────────────────────────────────
+function owAudioBufferToWav(buf) {
+  const ch = buf.numberOfChannels, sr = buf.sampleRate, len = buf.length;
+  const ab = new ArrayBuffer(44 + len * ch * 2);
+  const v  = new DataView(ab);
+  const w  = (off, val, n) => { for (let i=0;i<n;i++) v.setUint8(off+i,(val>>(i*8))&0xff); };
+  const ws = (off, s)      => { for (let i=0;i<s.length;i++) v.setUint8(off+i,s.charCodeAt(i)); };
+  ws(0,'RIFF'); w(4,ab.byteLength-8,4); ws(8,'WAVE'); ws(12,'fmt ');
+  w(16,16,4); w(20,1,2); w(22,ch,2); w(24,sr,4); w(28,sr*ch*2,4); w(32,ch*2,2); w(36,16,2);
+  ws(38,'data'); w(42,len*ch*2,4);
+  let off=44;
+  for (let i=0;i<len;i++) for (let c=0;c<ch;c++) {
+    const s=Math.max(-1,Math.min(1,buf.getChannelData(c)[i]));
+    v.setInt16(off,Math.round(s<0?s*32768:s*32767),true); off+=2;
+  }
+  return ab;
+}
+
+// ─── Mise à niveau audio : transposition selon le nouveau posY ───────────────
+async function owMiseANiveauAudio(grp) {
+  if (!grp.transposition) return;
+  if (!owFilePath || !window.api?.readAudioFile) return;
+  const parsed = owParseGrpXml(grp.id);
+  if (!parsed) return;
+  const origObjs = parsed.audio;
+  const newObjs  = grp.owTableObjets;
+  if (!newObjs?.length) return;
+
+  const SPACE_H = 3000;
+  const status  = document.getElementById('spFaustStatus');
+  if (status) status.textContent = 'Traitement audio…';
+
+  let count = 0;
+  for (const newObj of newObjs) {
+    const origObj = origObjs.find(o => o.id === newObj.id);
+    if (!origObj?.file) continue;
+    if (origObj.flagTranspo === 0) continue;
+
+    const origRef = owPitchRef(origObj);
+    const newRef  = owPitchRef(newObj);
+    const origFactor = (SPACE_H - origRef) / (SPACE_H / 2);
+    const newFactor  = (SPACE_H - newRef)  / (SPACE_H / 2);
+    if (origFactor <= 0 || newFactor <= 0) continue;
+    const relativeFactor = newFactor / origFactor;
+    if (Math.abs(relativeFactor - 1) < 0.001) continue;
+
+    const raw = await window.api.readAudioFile(owFilePath, origObj.file);
+    if (!raw) { console.warn('[Audio] fichier introuvable :', origObj.file); continue; }
+
+    const rawAb = raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength);
+    const tmpCtx = new AudioContext();
+    let audioBuf;
+    try { audioBuf = await tmpCtx.decodeAudioData(rawAb); }
+    catch(e) { console.warn('[Audio] décodage échoué :', origObj.file, e.message); await tmpCtx.close(); continue; }
+    await tmpCtx.close();
+
+    const newLen = Math.max(1, Math.round(audioBuf.length / relativeFactor));
+    const offCtx = new OfflineAudioContext(audioBuf.numberOfChannels, newLen, audioBuf.sampleRate);
+    const src = offCtx.createBufferSource();
+    src.buffer = audioBuf;
+    src.playbackRate.value = relativeFactor;
+    src.connect(offCtx.destination);
+    src.start(0);
+    const rendered = await offCtx.startRendering();
+
+    const wavData = owAudioBufferToWav(rendered);
+    await window.api.saveAudioFile(owFilePath, 'interprété', origObj.file, wavData);
+    count++;
+  }
+
+  if (status) status.textContent = `Audio : ${count} fichier(s) transposé(s) → Audios/interprété/`;
+  console.log(`[Audio] ${count} fichier(s) → Audios/interprété/`);
+}
+
 function owDrawTransformOverlay(grp, grpDiv) {
   grpDiv.querySelectorAll('.ow-drawn-obj[data-obj-class="1"]').forEach(e => e.remove());
   grpDiv.querySelectorAll('.ow-tr-marker').forEach(e => e.remove());
@@ -2166,8 +2241,11 @@ function parseObjetEl(el) {
     x3: vf('x3'),   y3:vf('y3'),
     cp1x:vf('cp1x',25), cp1y:vf('cp1y',30),
     cp2x:vf('cp2x',45), cp2y:vf('cp2y',30),
-    img: v('imag',''),
-    nom: v('nom','')
+    img:        v('imag',''),
+    nom:        v('nom',''),
+    file:       v('file',''),
+    flagTranspo:vi('flagtranspo', 1),
+    basePosY:   vf('baseposy'),
   };
 }
 

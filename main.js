@@ -45,6 +45,24 @@ ipcMain.handle('spatGetPaths', () => ({
   faustWasm: FAUST_DIR
 }));
 
+// ── Audios : lecture / écriture des fichiers audio du groupe ──────────────────
+ipcMain.handle('audiosReadFile', (_, partitionPath, filename) => {
+  if (!partitionPath) return null;
+  const filePath = path.join(path.dirname(partitionPath), 'Audios', filename);
+  try { return fs.readFileSync(filePath); }
+  catch(e) { return null; }
+});
+
+ipcMain.handle('audiosSaveFile', (_, partitionPath, subfolder, filename, data) => {
+  if (!partitionPath) return false;
+  const dir = path.join(path.dirname(partitionPath), 'Audios', subfolder);
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, filename), Buffer.from(data));
+    return true;
+  } catch(e) { console.error('audiosSaveFile:', e); return false; }
+});
+
 app.whenReady().then(createWindow);
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 app.on('activate', () => { if (!win) createWindow(); });
