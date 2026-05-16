@@ -489,20 +489,24 @@
 <div id="principal">
   <h2 style="font-size:0.95em;margin:4px 0;">Interpretor</h2>
 
+  <div id="owSectionHeader">Sections</div>
+  <div id="owSectionList"></div>
+  <div id="owNuanceHeader">Nuances</div>
+  <div id="owNuancePalette"></div>
+
+  <!-- Refresh -->
+  <div style="text-align:center;margin-top:14px;">
+    <span id="owBtnRefresh" onclick="owRefreshAll()" title="Mettre à niveau tous les objets"><img src="images/refresh.svg" width="20" height="20"/></span>
+  </div>
+
   <!-- Boutons transport -->
-  <div id="owTransport">
+  <div id="owTransport" style="margin-top:6px;">
     <span id="play1" onclick="playerDebut()" title="Début"><svg width='30' height='40' viewBox='0 0 70 90' xmlns='http://www.w3.org/2000/svg'><rect x='0' y='20' width="20" height="20" fill='#2373b2' stroke-width='0' transform='translate(50 24)'/><rect x='0' y='10' width="10" height="40" fill='#2373b2' stroke-width='0' transform='translate(10 24)'/><polyline points='0,20 40,0 40,40 0,20' fill='#2373b2' transform='translate(14 34)' stroke-width='0'/></svg></span>
     <span id="play2" onclick="playerPrec()" title="Précédent"><svg width='30' height='40' viewBox='0 0 70 90' xmlns='http://www.w3.org/2000/svg'><rect x='0' y='20' width="20" height="20" fill='#2373b2' stroke-width='0' transform='translate(40 24)'/><polyline points='0,20 40,0 40,40 0,20' fill='#2373b2' transform='translate(4 34)' stroke-width='0'/></svg></span>
     <span id="play3" onclick="readPart()" title="Lecture"><svg width='20' height='40' viewBox='0 0 40 90' xmlns='http://www.w3.org/2000/svg'><path d='M0,40 0,5 30,20 0,35' fill='#2373b2' transform='translate(8 34)' stroke='#2373b2' stroke-width='10'/></svg></span>
     <span id="play4" onclick="playerSuiv()" title="Suivant"><svg width='30' height='40' viewBox='0 0 70 90' xmlns='http://www.w3.org/2000/svg'><rect x='0' y='20' width="20" height="20" fill='#2373b2' stroke-width='0' transform='translate(14 24)'/><polyline points='0,40 0,0 40,20 0,40' fill='#2373b2' transform='translate(31 34)' stroke-width='0'/></svg></span>
     <span id="play5" onclick="playerEnd()" title="Fin"><svg width='30' height='40' viewBox='0 0 70 90' xmlns='http://www.w3.org/2000/svg'><rect x='0' y='20' width="20" height="20" fill='#2373b2' stroke-width='0' transform='translate(17 24)'/><polyline points='0,40 0,0 40,20 0,40' fill='#2373b2' transform='translate(34 34)' stroke-width='0'/><rect x='0' y='10' width="10" height="40" fill='#2373b2' stroke-width='0' transform='translate(70 24)'/></svg></span>
-    <span id="owBtnRefresh" onclick="owRefreshAll()" title="Mettre à niveau tous les objets"><img src="images/refresh.svg" width="20" height="20"/></span>
   </div>
-
-  <div id="owSectionHeader">Sections</div>
-  <div id="owSectionList"></div>
-  <div id="owNuanceHeader">Nuances</div>
-  <div id="owNuancePalette"></div>
 </div>
 
 <!-- ════════════════════════ ESPACE SECONDAIRE ════════════════════════ -->
