@@ -1652,6 +1652,9 @@ function owGrpCopier(grp) {
 
   const data = interpGrpData[grp.id];
   if (!data) return;
+  const parsed = owParseGrpXml(grp.id);
+  if (!parsed) return;
+  const {ctn} = parsed;
 
   // Mettre à jour les posX/posY dans le XML par matching d'ID
   const safeXml = data.xml.replace(/&(?!amp;|lt;|gt;|quot;|apos;|#\d+;|#x[\da-fA-F]+;)/g, '&amp;');
@@ -1669,11 +1672,12 @@ function owGrpCopier(grp) {
     if (el) { setVal(el, 'posx', o.posX); setVal(el, 'posy', o.posY); }
   }
 
-  // Adapter le conteneur (class 4) aux bornes des objets transformés
-  const minX = Math.min(...objs.map(o => o.posX));
-  const minY = Math.min(...objs.map(o => o.posY));
-  const maxX = Math.max(...objs.map(o => o.posX + (o.bkgWidth  || 0)));
-  const maxY = Math.max(...objs.map(o => o.posY + (o.bkgHeight || 0)));
+  // Adapter le conteneur (class 4) : inclure les bornes du conteneur original
+  // pour que sx = grp.w / ctnW conserve la même échelle que le groupe source
+  const minX = Math.min(ctn.ctnX, ...objs.map(o => o.posX));
+  const minY = Math.min(ctn.ctnY, ...objs.map(o => o.posY));
+  const maxX = Math.max(ctn.ctnX + ctn.ctnW, ...objs.map(o => o.posX + (o.bkgWidth  || 0)));
+  const maxY = Math.max(ctn.ctnY + ctn.ctnH, ...objs.map(o => o.posY + (o.bkgHeight || 0)));
   const ctnEl = allEls.find(e => {
     const c = e.querySelector('class'); return c && parseInt(c.getAttribute('value')) === 4;
   });
@@ -2506,6 +2510,11 @@ function owResizeElement(elmnt, grpData, startEvt) {
     document.onmousemove = null;
     document.onmouseup   = null;
     owModified = true;
+    const d = interpGrpData[grpData.id];
+    if (d) {
+      drawObjets(d.xml, elmnt, d.imgBase);
+      if (grpData.owTableObjets?.length) owDrawTransformOverlay(grpData, elmnt);
+    }
   };
 }
 
