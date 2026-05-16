@@ -1700,7 +1700,7 @@ function owTrAugm(objs, val) {
   const res = [{...objs[0]}];
   for (let i = 1; i < objs.length; i++) {
     const interval = objs[i].posY - objs[i - 1].posY;
-    res.push({...objs[i], posY: res[i - 1].posY + interval + val});
+    res.push({...objs[i], posY: res[i - 1].posY + interval + Math.sign(interval) * val});
   }
   return res;
 }
