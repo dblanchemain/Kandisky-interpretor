@@ -2111,17 +2111,13 @@ function owAudioBufferToWav(buf) {
 
 // ─── Mise à niveau audio : transposition selon le nouveau posY ───────────────
 async function owMiseANiveauAudio(grp) {
-  console.log('[Audio] owMiseANiveauAudio — transposition:', grp.transposition, 'owFilePath:', owFilePath);
-  if (!grp.transposition) { console.log('[Audio] transposition désactivée'); return; }
-  if (!owFilePath)         { console.log('[Audio] owFilePath null'); return; }
-  if (!window.api?.readAudioFile) { console.log('[Audio] api.readAudioFile absent'); return; }
+  if (!grp.transposition) return;
+  if (!owFilePath || !window.api?.readAudioFile) return;
   const parsed = owParseGrpXml(grp.id);
-  if (!parsed) { console.log('[Audio] owParseGrpXml null'); return; }
+  if (!parsed) return;
   const origObjs = parsed.audio;
   const newObjs  = grp.owTableObjets;
-  console.log('[Audio] origObjs:', origObjs.length, 'newObjs:', newObjs?.length);
-  origObjs.forEach(o => console.log('[Audio] orig obj', o.id, 'file:', o.file, 'flagTranspo:', o.flagTranspo, 'posY:', o.posY));
-  if (!newObjs?.length) { console.log('[Audio] owTableObjets vide'); return; }
+  if (!newObjs?.length) return;
 
   const SPACE_H = 3000;
   const status  = document.getElementById('spFaustStatus');
@@ -2130,19 +2126,17 @@ async function owMiseANiveauAudio(grp) {
   let count = 0;
   for (const newObj of newObjs) {
     const origObj = origObjs.find(o => o.id === newObj.id);
-    console.log('[Audio] newObj', newObj.id, 'posY:', newObj.posY, '→ origObj:', origObj?.id, 'flagTranspo:', origObj?.flagTranspo);
-    if (!origObj) { console.log('[Audio] skip — origObj introuvable'); continue; }
-    if (origObj.flagTranspo === 0) { console.log('[Audio] skip — flagTranspo=0'); continue; }
+    if (!origObj) continue;
+    if (origObj.flagTranspo === 0) continue;
 
     const filename = origObj.id + '-fx.wav';
     const origRef = owPitchRef(origObj);
     const newRef  = owPitchRef(newObj);
     const origFactor = (SPACE_H - origRef) / (SPACE_H / 2);
     const newFactor  = (SPACE_H - newRef)  / (SPACE_H / 2);
-    console.log('[Audio]', filename, 'origRef:', origRef, 'newRef:', newRef, 'facteurs:', origFactor.toFixed(3), '→', newFactor.toFixed(3));
-    if (origFactor <= 0 || newFactor <= 0) { console.log('[Audio] skip — facteur ≤ 0'); continue; }
+    if (origFactor <= 0 || newFactor <= 0) continue;
     const relativeFactor = newFactor / origFactor;
-    if (Math.abs(relativeFactor - 1) < 0.001) { console.log('[Audio] skip — pas de changement'); continue; }
+    if (Math.abs(relativeFactor - 1) < 0.001) continue;
 
     const raw = await window.api.readAudioFile(owFilePath, filename);
     if (!raw) { console.warn('[Audio] fichier introuvable :', origObj.file); continue; }
