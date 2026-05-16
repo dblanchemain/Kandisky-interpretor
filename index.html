@@ -826,9 +826,9 @@ function owParseData(txt, label) {
           augDimMin: n(g.getAttribute('augDimMin'), -2),
           augDimMax: n(g.getAttribute('augDimMax'),  2),
           expansion: b(g.getAttribute('expansion')),
-          expansionMin: n(g.getAttribute('expansionMin'), 0.5),
-          expansionMax: n(g.getAttribute('expansionMax'), 2.0),
-          expansionVal: n(g.getAttribute('expansionVal'), 1.0),
+          expansionMin: n(g.getAttribute('expansionMin'), -5),
+          expansionMax: n(g.getAttribute('expansionMax'),  5),
+          expansionVal: n(g.getAttribute('expansionVal'), 0),
           augDimVal:    n(g.getAttribute('augDimVal'), 0),
           variationTempo:     b(g.getAttribute('variationTempo')),
           variationIntensite: b(g.getAttribute('variationIntensite')),
@@ -951,7 +951,7 @@ function owSerialise() {
       xml += ` repetition="${b(grp.repetition)}" repetitionMax="${grp.repetitionMax ?? 2}"`;
       xml += ` transposition="${b(grp.transposition)}"`;
       xml += ` augDim="${b(grp.augDim)}" augDimMin="${grp.augDimMin ?? -2}" augDimMax="${grp.augDimMax ?? 2}" augDimVal="${grp.augDimVal ?? 0}"`;
-      xml += ` expansion="${b(grp.expansion)}" expansionMin="${grp.expansionMin ?? 0.5}" expansionMax="${grp.expansionMax ?? 2.0}" expansionVal="${grp.expansionVal ?? 1.0}"`;
+      xml += ` expansion="${b(grp.expansion)}" expansionMin="${grp.expansionMin ?? -5}" expansionMax="${grp.expansionMax ?? 5}" expansionVal="${grp.expansionVal ?? 0}"`;
       xml += ` variationTempo="${b(grp.variationTempo)}" variationIntensite="${b(grp.variationIntensite)}"`;
       xml += ` posRelDebut="${b(grp.posRelDebut)}" posRelDebutAvant="${x(grp.posRelDebutAvant)}" posRelDebutGroupe="${x(grp.posRelDebutGroupe)}"`;
       xml += ` posRelFin="${b(grp.posRelFin)}" posRelFinAvant="${x(grp.posRelFinAvant)}" posRelFinGroupe="${x(grp.posRelFinGroupe)}"`;
@@ -1507,7 +1507,7 @@ function owRenderGroups() {
     const expVal = document.createElement('div');
     expVal.className = 'ow-grp-exp-val';
     expVal.style.display = grp.expansion ? 'block' : 'none';
-    if (grp.expansion) expVal.textContent = '×' + (grp.expansionVal ?? 1.0).toFixed(2);
+    if (grp.expansion) expVal.textContent = owFmtAugm(grp.expansionVal ?? 0);
     div.appendChild(expVal);
 
     /* ── Label : sous le cadre ── */
@@ -1568,7 +1568,7 @@ function owApplyGrpStyle(el, grp) {
   const expVal = el.querySelector('.ow-grp-exp-val');
   if (expVal) {
     expVal.style.display = grp.expansion ? 'block' : 'none';
-    if (grp.expansion) expVal.textContent = '×' + (grp.expansionVal ?? 1.0).toFixed(2);
+    if (grp.expansion) expVal.textContent = owFmtAugm(grp.expansionVal ?? 0);
   }
 }
 
@@ -1600,10 +1600,10 @@ function owOpenGrpPlayPopup(grp, divEl) {
   // Expansion
   const expInp = document.getElementById('grpPlayExpansion');
   expInp.disabled = !grp.expansion;
-  expInp.min  = grp.expansionMin ?? 0.5;
-  expInp.max  = grp.expansionMax ?? 2.0;
+  expInp.min  = grp.expansionMin ?? -5;
+  expInp.max  = grp.expansionMax ??  5;
   expInp.step = 0.1;
-  expInp.value = grp.expansionVal ?? 1.0;
+  expInp.value = grp.expansionVal ?? 0;
 
   // Position popup sous le cadre (coordonnées page)
   const popup = document.getElementById('grpPlayPopup');
@@ -1624,7 +1624,7 @@ function owGrpPlayValidate() {
   if (!grp) { owGrpPlayCancel(); return; }
   grp.dir = document.getElementById('grpPlayLecture').value;
   if (grp.augDim)    grp.augDimVal    = parseFloat(document.getElementById('grpPlayAugm').value)      || 0;
-  if (grp.expansion) grp.expansionVal = parseFloat(document.getElementById('grpPlayExpansion').value) || 1.0;
+  if (grp.expansion) grp.expansionVal = parseFloat(document.getElementById('grpPlayExpansion').value) || 0;
 
   owModified = true;
   document.getElementById('grpPlayPopup').style.display = 'none';
@@ -1696,15 +1696,21 @@ function owTrRetrograde(objs) {
 }
 
 function owTrAugm(objs, val) {
-  return objs.map(o => ({...o, posY: o.posY - val}));  // val>0 monte (Y décroît à l'écran)
-}
-
-function owTrExpansion(objs, factor) {
   if (objs.length <= 1) return objs.map(o => ({...o}));
-  const startX = objs[0].posX;
   const res = [{...objs[0]}];
   for (let i = 1; i < objs.length; i++) {
-    res.push({...objs[i], posX: res[i-1].posX + (objs[i].posX - objs[i-1].posX) * factor});
+    const interval = objs[i].posY - objs[i - 1].posY;
+    res.push({...objs[i], posY: res[i - 1].posY + interval + val});
+  }
+  return res;
+}
+
+function owTrExpansion(objs, val) {
+  if (objs.length <= 1) return objs.map(o => ({...o}));
+  const res = [{...objs[0]}];
+  for (let i = 1; i < objs.length; i++) {
+    const interval = objs[i].posX - objs[i - 1].posX;
+    res.push({...objs[i], posX: res[i - 1].posX + interval + val});
   }
   return res;
 }
@@ -1721,7 +1727,7 @@ function owComputeGrpObjets(grp) {
     default:               objs = owTrDirect(objs);                            break;
   }
   if (grp.augDim    && grp.augDimVal)                         objs = owTrAugm(objs, grp.augDimVal);
-  if (grp.expansion && grp.expansionVal && grp.expansionVal !== 1.0) objs = owTrExpansion(objs, grp.expansionVal);
+  if (grp.expansion && grp.expansionVal)                             objs = owTrExpansion(objs, grp.expansionVal);
 
   grp.owTableObjets = objs;
   owTableObjets[grp.id] = objs;
