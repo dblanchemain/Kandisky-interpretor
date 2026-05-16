@@ -105,6 +105,7 @@
     #principal {
       top: 26px !important;
       height: calc(100vh - 26px) !important;
+      overflow: hidden !important;
     }
     #secondaire {
       top: 26px !important;
@@ -153,7 +154,6 @@
       padding: 2px 4px;
       font-size: 0.8em;
       overflow-y: auto;
-      max-height: 600px;
     }
     .ow-sec-item {
       padding: 3px 4px 3px 6px;
@@ -201,7 +201,6 @@
       padding: 2px 4px;
       font-size: 0.85em;
       overflow-y: auto;
-      max-height: 240px;
     }
     #defpaletteNuances {
       width: 100%;
@@ -3512,6 +3511,22 @@ function owUpdateWorkspace() {
   const work2 = document.getElementById('work2');
   if (work)  { work.style.width  = w + 'px'; work.style.height = (window.innerHeight - 70)  + 'px'; }
   if (work2) {                                work2.style.height = (window.innerHeight - 100) + 'px'; }
+
+  // Dimensionner les listes du panneau gauche pour qu'elles tiennent dans #principal
+  const principal = document.getElementById('principal');
+  const secList   = document.getElementById('owSectionList');
+  const nuPal     = document.getElementById('owNuancePalette');
+  if (principal && secList && nuPal) {
+    let fixedH = 0;
+    for (const child of principal.children) {
+      if (child.id === 'owSectionList' || child.id === 'owNuancePalette') continue;
+      const cs = getComputedStyle(child);
+      fixedH += child.offsetHeight + parseFloat(cs.marginTop) + parseFloat(cs.marginBottom);
+    }
+    const avail = Math.max(40, principal.clientHeight - fixedH - 8);
+    secList.style.maxHeight = Math.round(avail * 0.62) + 'px';
+    nuPal.style.maxHeight   = Math.round(avail * 0.38) + 'px';
+  }
 }
 owUpdateWorkspace();
 window.addEventListener('resize', owUpdateWorkspace);
