@@ -2054,7 +2054,7 @@ function owComputeGrpObjets(grp) {
 }
 
 // ─── Décodeur WAV manuel (fallback à decodeAudioData) ───────────────────────
-function owDecodeWavManual(ab) {
+function owDecodeWavManual(ab, audioCtx) {
   const v = new DataView(ab);
   const rs = (off, n) => Array.from({length:n}, (_,i) => String.fromCharCode(v.getUint8(off+i))).join('');
   if (rs(0,4) !== 'RIFF' || rs(8,4) !== 'WAVE') throw new Error('Not WAV');
@@ -2073,9 +2073,10 @@ function owDecodeWavManual(ab) {
   if (!fmt || !dataOff) throw new Error('WAV invalide');
   const { af, ch, sr, bps } = fmt;
   const frames = Math.floor(dataSize / (ch * bps / 8));
-  const ctx = new AudioContext();
-  const buf = ctx.createBuffer(ch, frames, sr);
-  ctx.close();
+  const localCtx = !audioCtx ? new AudioContext() : null;
+  const usedCtx  = audioCtx || localCtx;
+  const buf = usedCtx.createBuffer(ch, frames, sr);
+  if (localCtx) localCtx.close();
   for (let c = 0; c < ch; c++) {
     const d = buf.getChannelData(c);
     const stride = ch * bps / 8;
@@ -3183,16 +3184,22 @@ function owMoveBarTo(px) {
   owSetCompteur(x);
 }
 
+function owRescheduleAudio() {
+  if (owPlayTimer) owStartAudio().catch(e => console.error('[Lecture audio]', e));
+}
+
 function playerDebut() {
   owMoveBarTo(0);
+  owRescheduleAudio();
 }
 
 function playerEnd() {
-  if (owActiveSec === null) { owMoveBarTo(0); return; }
+  if (owActiveSec === null) { owMoveBarTo(0); owRescheduleAudio(); return; }
   const grps = owGroups.filter(g => g.sectionId === owActiveSec);
-  if (!grps.length) { owMoveBarTo(0); return; }
+  if (!grps.length) { owMoveBarTo(0); owRescheduleAudio(); return; }
   const maxX = Math.max(...grps.map(g => ((g.posX || 0) + (g.w || 0)) * owZoomScale));
   owMoveBarTo(maxX);
+  owRescheduleAudio();
 }
 
 function playerPrec() {
@@ -3204,6 +3211,7 @@ function playerPrec() {
     .filter(x => x < curPx - 2)
     .sort((a, b) => b - a);
   owMoveBarTo(positions.length ? positions[0] : 0);
+  owRescheduleAudio();
 }
 
 function playerSuiv() {
@@ -3215,6 +3223,67 @@ function playerSuiv() {
     .filter(x => x > curPx + 2)
     .sort((a, b) => a - b);
   if (positions.length) owMoveBarTo(positions[0]);
+  owRescheduleAudio();
+}
+
+// ─── Lecture audio : envoi vers le contexte Web Audio ───────────────────────
+let owAudioCtx    = null;
+let owPlaySources = [];
+
+function owStopAudio() {
+  owPlaySources.forEach(src => { try { src.stop(0); } catch(e) {} });
+  owPlaySources = [];
+}
+
+async function owStartAudio() {
+  if (!owFilePath || !window.api?.readAudioFile) return;
+  if (owActiveSec === null) return;
+
+  if (!owAudioCtx || owAudioCtx.state === 'closed') owAudioCtx = new AudioContext();
+  if (owAudioCtx.state === 'suspended') await owAudioCtx.resume();
+
+  owStopAudio();
+
+  const barTime      = owBarVertTime;
+  const scheduleBase = owAudioCtx.currentTime;
+
+  const grps = owGroups.filter(g => g.sectionId === owActiveSec && g.owTableObjets?.length);
+
+  for (const grp of grps) {
+    const parsed = owParseGrpXml(grp.id);
+    if (!parsed) continue;
+    const { ctn } = parsed;
+    const sx0 = (grp._baseW !== undefined ? grp._baseW : grp.w) / ctn.ctnW;
+
+    for (const obj of grp.owTableObjets) {
+      const objPx   = grp.posX + (obj.posX - ctn.ctnX) * sx0;
+      const objTime = objPx / OW_BASE_PX;
+      const delay   = objTime - barTime;
+      if (delay < -0.05) continue;
+
+      const fname = obj.id + '-fx.wav';
+      let raw = await window.api.readAudioFile(owFilePath, 'interprété/' + fname);
+      if (!raw) raw = await window.api.readAudioFile(owFilePath, fname);
+      if (!raw) { console.warn('[Lecture] fichier introuvable :', fname); continue; }
+
+      const rawAb = new Uint8Array(raw).buffer;
+      let buf;
+      try {
+        buf = await owAudioCtx.decodeAudioData(rawAb.slice(0));
+      } catch(e) {
+        try { buf = owDecodeWavManual(rawAb, owAudioCtx); }
+        catch(e2) { console.warn('[Lecture] décodage échoué :', fname, e2.message); continue; }
+      }
+
+      const src = owAudioCtx.createBufferSource();
+      src.buffer = buf;
+      src.connect(owAudioCtx.destination);
+      src.start(scheduleBase + Math.max(0, delay));
+      owPlaySources.push(src);
+      console.log('[Lecture]', fname, '→', delay.toFixed(3) + 's');
+    }
+  }
+  console.log('[Lecture] ' + owPlaySources.length + ' source(s) programmée(s)');
 }
 
 let owPlayTimer = null;
@@ -3224,9 +3293,11 @@ function readPart() {
     clearInterval(owPlayTimer);
     owPlayTimer = null;
     btn.classList.remove('playing');
+    owStopAudio();
     return;
   }
   btn.classList.add('playing');
+  owStartAudio().catch(e => console.error('[Lecture audio]', e));
   const frameMs = 50;
   owPlayTimer = setInterval(() => {
     const bar = document.getElementById('owBarVerticale');
