@@ -630,6 +630,7 @@
     <div class="pref-tab actif" onclick="owShowPrefTab('nuances')">Nuances</div>
     <div class="pref-tab" onclick="owShowPrefTab('grille')">Grille</div>
     <div class="pref-tab" onclick="owShowPrefTab('spatial');owSpatialRemplirUI()">Spatialisation</div>
+    <div class="pref-tab" onclick="owShowPrefTab('son');owSonRemplirUI()">Son</div>
   </div>
   <div id="prefPaneGrille" class="pref-pane">
     <table border="0" cellpadding="5">
@@ -749,6 +750,25 @@
         </tr>
       </table>
     </div>
+  </div>
+
+  <!-- ── Son ── -->
+  <div id="prefPaneSon" class="pref-pane">
+    <table border="0" cellpadding="5" style="width:100%;">
+      <tr>
+        <td style="white-space:nowrap;">Sortie :</td>
+        <td>
+          <select id="owSonDevice" style="width:100%;" onchange="owSonSetDevice(this.value)">
+            <option value="">— défaut système —</option>
+          </select>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2">
+          <div id="owSonStatus" style="font-size:0.78em;color:#666;margin-top:2px;"></div>
+        </td>
+      </tr>
+    </table>
   </div>
 
   <div class="ow-popup-foot">
@@ -1433,6 +1453,40 @@ function owShowPrefTab(tab) {
   document.querySelectorAll('.pref-tab').forEach(t => t.classList.remove('actif'));
   document.getElementById('prefPane' + tab.charAt(0).toUpperCase() + tab.slice(1)).classList.add('actif');
   document.querySelector('.pref-tab[onclick*="' + tab + '"]').classList.add('actif');
+}
+
+// ── Son : sélection de la sortie audio ──────────
+let owSonDeviceId = '';
+
+async function owSonRemplirUI() {
+  const sel    = document.getElementById('owSonDevice');
+  const status = document.getElementById('owSonStatus');
+  try {
+    await navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => {});
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const outputs = devices.filter(d => d.kind === 'audiooutput');
+    sel.innerHTML = '<option value="">— défaut système —</option>' +
+      outputs.map(d => `<option value="${d.deviceId}"${d.deviceId===owSonDeviceId?' selected':''}>${d.label||d.deviceId}</option>`).join('');
+    status.textContent = outputs.length + ' périphérique(s) détecté(s)';
+  } catch(e) {
+    status.textContent = 'Impossible de lister les périphériques : ' + e.message;
+  }
+}
+
+async function owSonSetDevice(deviceId) {
+  const status = document.getElementById('owSonStatus');
+  owSonDeviceId = deviceId;
+  if (!owAudioCtx) return;
+  try {
+    if (typeof owAudioCtx.setSinkId === 'function') {
+      await owAudioCtx.setSinkId(deviceId || '');
+      status.textContent = deviceId ? 'Sortie : ' + deviceId.slice(0, 20) + '…' : 'Sortie : défaut système';
+    } else {
+      status.textContent = 'setSinkId non supporté sur ce moteur';
+    }
+  } catch(e) {
+    status.textContent = 'Erreur : ' + e.message;
+  }
 }
 
 // ── Spatialisation ──────────────────────────────
