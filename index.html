@@ -2919,6 +2919,20 @@ function owDragElement(elmnt, grpData, startEvt) {
       dragged = true;
       owDragMoved = true;
     }
+    if (dragged) {
+      const work = document.getElementById('work');
+      if (work) {
+        const rect = work.getBoundingClientRect();
+        const margin = 60, step = 15;
+        if (e.clientX > rect.right - margin) {
+          const δ = Math.min(step, 12960 - work.scrollLeft - work.clientWidth);
+          if (δ > 0) { work.scrollLeft += δ; p3 -= δ; }
+        } else if (e.clientX < rect.left + margin && work.scrollLeft > 0) {
+          const δ = Math.min(step, work.scrollLeft);
+          work.scrollLeft -= δ; p3 += δ;
+        }
+      }
+    }
     p1 = p3 - e.clientX; p2 = p4 - e.clientY;
     p3 = e.clientX;       p4 = e.clientY;
     if (!dragged) return;
