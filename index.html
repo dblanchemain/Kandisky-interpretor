@@ -2144,11 +2144,11 @@ function owComputeGrpObjets(grp) {
   if (grp.expansion && grp.expansionVal)                             objs = owTrExpansion(objs, grp.expansionVal);
 
   if (grp._objGlobalBase !== undefined) {
-    objs.forEach((o, i) => { o.id = 'objet' + (grp._objGlobalBase + i); });
+    objs.forEach((o, i) => { o._origId = o._origId || o.id; o.id = 'objet' + (grp._objGlobalBase + i); });
   }
   grp.owTableObjets = objs;
   owTableObjets[grp.id] = objs;
-  console.log('[owTableObjets] grp', grp.id, '(' + (grp.name||'') + ')', objs.map(o => o.id + ' → ' + o.id + '.wav'));
+  console.log('[owTableObjets] grp', grp.id, '(' + (grp.name||'') + ')', objs.map(o => (o._origId||o.id) + '.wav → ' + o.id + '.wav'));
   return objs;
 }
 
