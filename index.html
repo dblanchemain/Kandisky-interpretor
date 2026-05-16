@@ -961,7 +961,7 @@ function owParseData(txt, label) {
           renvRetrograde: b(g.getAttribute('renvRetrograde')),
           repetition: b(g.getAttribute('repetition')),
           repetitionMax: n(g.getAttribute('repetitionMax'), 2),
-          transposition: b(g.getAttribute('transposition')),
+          transposition: g.getAttribute('transposition') === 'false' ? false : true,
           augDim: b(g.getAttribute('augDim')),
           augDimMin: n(g.getAttribute('augDimMin'), -2),
           augDimMax: n(g.getAttribute('augDimMax'),  2),
@@ -2073,13 +2073,17 @@ function owAudioBufferToWav(buf) {
 
 // ─── Mise à niveau audio : transposition selon le nouveau posY ───────────────
 async function owMiseANiveauAudio(grp) {
-  if (!grp.transposition) return;
-  if (!owFilePath || !window.api?.readAudioFile) return;
+  console.log('[Audio] owMiseANiveauAudio — transposition:', grp.transposition, 'owFilePath:', owFilePath);
+  if (!grp.transposition) { console.log('[Audio] transposition désactivée'); return; }
+  if (!owFilePath)         { console.log('[Audio] owFilePath null'); return; }
+  if (!window.api?.readAudioFile) { console.log('[Audio] api.readAudioFile absent'); return; }
   const parsed = owParseGrpXml(grp.id);
-  if (!parsed) return;
+  if (!parsed) { console.log('[Audio] owParseGrpXml null'); return; }
   const origObjs = parsed.audio;
   const newObjs  = grp.owTableObjets;
-  if (!newObjs?.length) return;
+  console.log('[Audio] origObjs:', origObjs.length, 'newObjs:', newObjs?.length);
+  origObjs.forEach(o => console.log('[Audio] orig obj', o.id, 'file:', o.file, 'flagTranspo:', o.flagTranspo, 'posY:', o.posY));
+  if (!newObjs?.length) { console.log('[Audio] owTableObjets vide'); return; }
 
   const SPACE_H = 3000;
   const status  = document.getElementById('spFaustStatus');
@@ -2088,8 +2092,9 @@ async function owMiseANiveauAudio(grp) {
   let count = 0;
   for (const newObj of newObjs) {
     const origObj = origObjs.find(o => o.id === newObj.id);
-    if (!origObj?.file) continue;
-    if (origObj.flagTranspo === 0) continue;
+    console.log('[Audio] newObj', newObj.id, 'posY:', newObj.posY, '→ origObj:', origObj?.id, 'file:', origObj?.file, 'flagTranspo:', origObj?.flagTranspo);
+    if (!origObj?.file) { console.log('[Audio] skip — pas de file'); continue; }
+    if (origObj.flagTranspo === 0) { console.log('[Audio] skip — flagTranspo=0'); continue; }
 
     const origRef = owPitchRef(origObj);
     const newRef  = owPitchRef(newObj);
