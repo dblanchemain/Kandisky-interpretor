@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, protocol } = require('electron');
 const path = require('path');
 const fs   = require('fs');
 
@@ -20,6 +20,30 @@ function createWindow() {
   win.removeMenu();
   win.on('closed', () => { win = null; });
 }
+
+// ── Spatialisation : accès aux layouts et à faustwasm ──────────────────────
+const DSP_DIR   = path.join(__dirname, 'Dsp');
+const FAUST_DIR = path.join(__dirname, 'faustwasm');
+
+ipcMain.handle('spatListLayouts', () => {
+  try {
+    return fs.readdirSync(DSP_DIR)
+      .filter(f => f.endsWith('.json'))
+      .map(f => f.slice(0, -5))
+      .sort();
+  } catch(e) { return []; }
+});
+
+ipcMain.handle('spatReadLayout', (_, name) => {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(DSP_DIR, name + '.json'), 'utf-8'));
+  } catch(e) { return null; }
+});
+
+ipcMain.handle('spatGetPaths', () => ({
+  basedir:   __dirname,
+  faustWasm: FAUST_DIR
+}));
 
 app.whenReady().then(createWindow);
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });

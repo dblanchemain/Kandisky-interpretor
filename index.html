@@ -624,18 +624,13 @@
   <div id="prefPaneSpatial" class="pref-pane">
     <table border="0" cellpadding="4" style="width:100%;">
       <tr>
-        <td style="white-space:nowrap;">Greffon :</td>
+        <td style="white-space:nowrap;">Type :</td>
         <td>
-          <select id="spGreffon" onchange="owSpatialGreffon()">
-            <option value="vbap3d">VBAP3D</option>
-            <option value="hoa">HOA</option>
-          </select>
+          <label><input type="radio" name="spType" value="vbap3d"
+                 onchange="owSpatialGreffon()" checked> VBAP3D</label>
+          <label style="margin-left:10px;"><input type="radio" name="spType" value="hoa"
+                 onchange="owSpatialGreffon()"> HOA</label>
         </td>
-      </tr>
-      <tr>
-        <td>Canaux :</td>
-        <td><input id="spNbCanaux" type="number" min="1" max="64" value="8"
-             style="width:60px;" oninput="owSpatialCanaux()"/></td>
       </tr>
     </table>
 
@@ -647,29 +642,39 @@
           <td>Layout :</td>
           <td>
             <select id="spVbapLayout" onchange="owSpatialVbapLayout()">
-              <option value="anneau">Anneau horizontal</option>
-              <option value="sphere">Sphère</option>
-              <option value="custom">Personnalisé</option>
+              <option value="">— chargement… —</option>
             </select>
           </td>
         </tr>
+        <tr>
+          <td>Canaux :</td>
+          <td><span id="spVbapNbCanaux" style="font-weight:bold;">—</span></td>
+        </tr>
       </table>
-      <div id="spVbapCustom" style="display:none;margin-top:4px;max-height:150px;overflow-y:auto;">
-        <table border="0" cellpadding="2" style="font-size:0.8em;width:100%;">
+      <div id="spVbapInfo" style="margin-top:4px;max-height:130px;overflow-y:auto;">
+        <table border="0" cellpadding="2" style="font-size:0.78em;width:100%;color:#444;">
           <thead><tr>
             <th style="text-align:left;">Hp.</th>
-            <th style="text-align:left;">Azimut (°)</th>
-            <th style="text-align:left;">Élév. (°)</th>
+            <th style="text-align:left;">x</th>
+            <th style="text-align:left;">y</th>
+            <th style="text-align:left;">z</th>
+            <th style="text-align:left;">d</th>
           </tr></thead>
           <tbody id="spVbapHpBody"></tbody>
         </table>
       </div>
+      <div id="spFaustStatus" style="margin-top:6px;font-size:0.8em;color:#666;">Faust : —</div>
     </div>
 
     <!-- ── HOA ── -->
     <div id="spHoaSection" style="display:none;">
       <hr style="margin:6px 0;border-color:#ccc;"/>
       <table border="0" cellpadding="4" style="width:100%;">
+        <tr>
+          <td>Canaux :</td>
+          <td><input id="spHoaNbCanaux" type="number" min="4" max="64" value="4"
+               style="width:60px;" oninput="owSpatialCalcOrdre()"/></td>
+        </tr>
         <tr>
           <td>Ordre :</td>
           <td><span id="spHoaOrdre" style="font-weight:bold;">1</span>
@@ -685,7 +690,7 @@
           </td>
         </tr>
         <tr>
-          <td>Canaux :</td>
+          <td>Format :</td>
           <td>
             <label><input type="radio" name="spHoaFormat" value="acn"
                    onchange="owSpatialPrefs.hoaFormat='acn'" checked> ACN</label>
@@ -752,7 +757,7 @@ let owNuances   = [
 let owSpatialPrefs = {
   greffon: 'vbap3d',   // 'vbap3d' | 'hoa'
   nbCanaux: 8,
-  vbapLayout: 'anneau', // 'anneau' | 'sphere' | 'custom'
+  vbapLayout: 'anneau8', // nom du layout JSON (ex: 'anneau8', 'auro50'…)
   vbapHautParleurs: [], // [{az, el}] — layout personnalisé
   hoaOrdre: 1,          // auto-calculé depuis nbCanaux
   hoaNorm: 'sn3d',      // 'sn3d' | 'n3d'
@@ -937,7 +942,7 @@ function owParseData(txt, label) {
     if (spatialEl) {
       owSpatialPrefs.greffon    = spatialEl.getAttribute('greffon')    || 'vbap3d';
       owSpatialPrefs.nbCanaux   = parseInt(spatialEl.getAttribute('nbCanaux'))  || 8;
-      owSpatialPrefs.vbapLayout = spatialEl.getAttribute('vbapLayout') || 'anneau';
+      owSpatialPrefs.vbapLayout = spatialEl.getAttribute('vbapLayout') || 'anneau8';
       owSpatialPrefs.hoaNorm    = spatialEl.getAttribute('hoaNorm')    || 'sn3d';
       owSpatialPrefs.hoaFormat  = spatialEl.getAttribute('hoaFormat')  || 'acn';
       owSpatialPrefs.hoaOrdre   = parseInt(spatialEl.getAttribute('hoaOrdre'))  ||
@@ -1078,13 +1083,9 @@ function owSerialise() {
     });
   });
   const sp = owSpatialPrefs;
-  let spXml = `    <spatial greffon="${sp.greffon}" nbCanaux="${sp.nbCanaux}"` +
+  xml += `    <spatial greffon="${sp.greffon}" nbCanaux="${sp.nbCanaux}"` +
     ` vbapLayout="${sp.vbapLayout}" hoaOrdre="${sp.hoaOrdre}"` +
-    ` hoaNorm="${sp.hoaNorm}" hoaFormat="${sp.hoaFormat}"`;
-  if (sp.vbapLayout === 'custom' && sp.vbapHautParleurs.length)
-    spXml += ` vbapHp="${sp.vbapHautParleurs.map(h => h.az + ':' + h.el).join(';')}"`;
-  spXml += `/>\n`;
-  xml += spXml;
+    ` hoaNorm="${sp.hoaNorm}" hoaFormat="${sp.hoaFormat}"/>\n`;
   xml += `  </interpretor>\n</openwork>\n`;
   return xml;
 }
@@ -1375,66 +1376,73 @@ function owShowPrefTab(tab) {
 }
 
 // ── Spatialisation ──────────────────────────────
-function owSpatialRemplirUI() {
+async function owSpatialRemplirUI() {
   const sp = owSpatialPrefs;
-  document.getElementById('spGreffon').value  = sp.greffon;
-  document.getElementById('spNbCanaux').value = sp.nbCanaux;
+  document.querySelector(`input[name="spType"][value="${sp.greffon}"]`).checked = true;
   document.getElementById('spVbapSection').style.display = sp.greffon === 'vbap3d' ? '' : 'none';
   document.getElementById('spHoaSection').style.display  = sp.greffon === 'hoa'    ? '' : 'none';
-  document.getElementById('spVbapLayout').value = sp.vbapLayout;
-  document.getElementById('spVbapCustom').style.display  = sp.vbapLayout === 'custom' ? '' : 'none';
-  if (sp.vbapLayout === 'custom') owSpatialBuildHpTable();
-  document.getElementById('spHoaOrdre').textContent = sp.hoaOrdre;
-  const normEl = document.querySelector(`input[name="spHoaNorm"][value="${sp.hoaNorm}"]`);
-  if (normEl) normEl.checked = true;
-  const fmtEl  = document.querySelector(`input[name="spHoaFormat"][value="${sp.hoaFormat}"]`);
-  if (fmtEl)  fmtEl.checked = true;
+
+  if (sp.greffon === 'vbap3d' && window.api?.listLayouts) {
+    const layouts = await window.api.listLayouts();
+    const sel = document.getElementById('spVbapLayout');
+    sel.innerHTML = layouts.map(n => `<option value="${n}"${n===sp.vbapLayout?' selected':''}>${n}</option>`).join('');
+    await owSpatialVbapLayout();
+  }
+  if (sp.greffon === 'hoa') {
+    document.getElementById('spHoaNbCanaux').value = sp.nbCanaux;
+    owSpatialCalcOrdre();
+    const normEl = document.querySelector(`input[name="spHoaNorm"][value="${sp.hoaNorm}"]`);
+    if (normEl) normEl.checked = true;
+    const fmtEl  = document.querySelector(`input[name="spHoaFormat"][value="${sp.hoaFormat}"]`);
+    if (fmtEl)  fmtEl.checked = true;
+  }
 }
 
 function owSpatialGreffon() {
-  const v = document.getElementById('spGreffon').value;
+  const v = document.querySelector('input[name="spType"]:checked')?.value || 'vbap3d';
   owSpatialPrefs.greffon = v;
   document.getElementById('spVbapSection').style.display = v === 'vbap3d' ? '' : 'none';
   document.getElementById('spHoaSection').style.display  = v === 'hoa'    ? '' : 'none';
   if (v === 'hoa') owSpatialCalcOrdre();
 }
 
-function owSpatialCanaux() {
-  owSpatialPrefs.nbCanaux = parseInt(document.getElementById('spNbCanaux').value) || 1;
-  if (owSpatialPrefs.greffon === 'hoa') owSpatialCalcOrdre();
-  if (owSpatialPrefs.greffon === 'vbap3d' && owSpatialPrefs.vbapLayout === 'custom') owSpatialBuildHpTable();
-}
-
 function owSpatialCalcOrdre() {
-  const ordre = Math.max(1, Math.floor(Math.sqrt(owSpatialPrefs.nbCanaux) - 1));
+  const n = parseInt(document.getElementById('spHoaNbCanaux')?.value) || 4;
+  owSpatialPrefs.nbCanaux = n;
+  const ordre = Math.max(1, Math.floor(Math.sqrt(n) - 1));
   owSpatialPrefs.hoaOrdre = ordre;
   document.getElementById('spHoaOrdre').textContent = ordre;
 }
 
-function owSpatialVbapLayout() {
+async function owSpatialVbapLayout() {
   const v = document.getElementById('spVbapLayout').value;
+  if (!v) return;
   owSpatialPrefs.vbapLayout = v;
-  document.getElementById('spVbapCustom').style.display = v === 'custom' ? '' : 'none';
-  if (v === 'custom') owSpatialBuildHpTable();
+  if (!window.api?.readLayoutJSON) return;
+  const layout = await window.api.readLayoutJSON(v);
+  if (!layout) return;
+  owSpatialPrefs.vbapHautParleurs = layout.speakers;
+  owSpatialPrefs.nbCanaux = layout.speakers.length;
+  document.getElementById('spVbapNbCanaux').textContent = layout.speakers.length;
+  const body = document.getElementById('spVbapHpBody');
+  body.innerHTML = layout.speakers.map((s, i) =>
+    `<tr><td>${i+1}</td><td>${s.x}</td><td>${s.y}</td><td>${s.z}</td><td>${s.d}</td></tr>`
+  ).join('');
 }
 
-function owSpatialBuildHpTable() {
-  const n = owSpatialPrefs.nbCanaux;
-  const existing = owSpatialPrefs.vbapHautParleurs;
-  const body = document.getElementById('spVbapHpBody');
-  body.innerHTML = '';
-  owSpatialPrefs.vbapHautParleurs = Array.from({length: n}, (_, i) =>
-    existing[i] || { az: Math.round(360 * i / n) - 180, el: 0 });
-  owSpatialPrefs.vbapHautParleurs.forEach((hp, i) => {
-    const tr = document.createElement('tr');
-    tr.innerHTML =
-      `<td>${i + 1}</td>` +
-      `<td><input type="number" min="-180" max="180" value="${hp.az}" style="width:62px;"
-           oninput="owSpatialPrefs.vbapHautParleurs[${i}].az=parseFloat(this.value)||0"/></td>` +
-      `<td><input type="number" min="-90"  max="90"  value="${hp.el}" style="width:52px;"
-           oninput="owSpatialPrefs.vbapHautParleurs[${i}].el=parseFloat(this.value)||0"/></td>`;
-    body.appendChild(tr);
-  });
+async function owInitFaust() {
+  if (!window.api?.listLayouts) return;
+  const status = document.getElementById('spFaustStatus');
+  if (status) status.textContent = 'Faust : compilation…';
+  try {
+    const layout = owSpatialPrefs.vbapLayout || 'anneau8';
+    window.owWamSpat = await owCreateLayout(layout);
+    if (status) status.textContent = `Faust : prêt (${layout}, ${window.owWamSpat.P} canaux)`;
+    console.log('[Spatialisation] Faust initialisé :', layout, window.owWamSpat);
+  } catch(err) {
+    if (status) status.textContent = 'Faust : erreur — ' + err.message;
+    console.error('[Spatialisation] init Faust :', err);
+  }
 }
 
 function owBuildNuancePalette() {
@@ -3171,6 +3179,14 @@ owBuildNuancesTable();
 owResetCompteur();
 owCreateReglette();
 owRebuildTempoPoints();
+
+// Initialisation Faust après chargement complet (spatialisation.js doit être chargé)
+window.addEventListener('load', () => {
+  if (owSpatialPrefs.greffon === 'vbap3d') {
+    owInitFaust().catch(e => console.warn('[Spatialisation] init :', e.message));
+  }
+});
 </script>
+<script src="spatialisation.js"></script>
 </body>
 </html>
