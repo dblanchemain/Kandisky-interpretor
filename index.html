@@ -1182,8 +1182,8 @@ function owUpdateGrp(param) {
   if (!grp) return;
   switch (param) {
     case 'nom':     grp.name    = document.getElementById('gpNom').value; break;
-    case 'w':       grp.w       = Math.max(20, parseInt(document.getElementById('gpW').value)||120); break;
-    case 'h':       grp.h       = Math.max(20, parseInt(document.getElementById('gpH').value)||60); break;
+    case 'w':       grp.w = Math.max(20, parseInt(document.getElementById('gpW').value)||120); grp._baseW = grp.w; break;
+    case 'h':       grp.h = Math.max(20, parseInt(document.getElementById('gpH').value)||60);  grp._baseH = grp.h; break;
     case 'color':   grp.color   = document.getElementById('gpColor').value; break;
     case 'opacity': grp.opacity = parseFloat(document.getElementById('gpOpacity').value)||0.5; break;
     case 'nuance':  grp.nuance  = document.getElementById('gpNuance').value; break;
@@ -1747,9 +1747,16 @@ function owDrawTransformOverlay(grp, grpDiv) {
   const {ctn} = parsed;
   const imgBase = interpGrpData[grp.id]?.imgBase || '';
 
-  // Échelle d'origine (avant tout redimensionnement)
-  const sx0 = grp.w / ctn.ctnW;
-  const sy0 = grp.h / ctn.ctnH;
+  // Mémoriser les dimensions d'origine (avant tout redimensionnement par overlay)
+  if (grp._baseW === undefined) {
+    grp._baseW    = grp.w;
+    grp._baseH    = grp.h;
+    grp._basePosY = grp.posY;
+  }
+
+  // Toujours calculer l'échelle depuis les dimensions d'origine
+  const sx0 = grp._baseW / ctn.ctnW;
+  const sy0 = grp._baseH / ctn.ctnH;
 
   // Bornes effectives du contenu transformé
   const minObjY = Math.min(...objs.map(o => o.posY));
@@ -1762,7 +1769,7 @@ function owDrawTransformOverlay(grp, grpDiv) {
 
   const newH    = Math.round(effCtnH * sy0);
   const newW    = Math.round(effCtnW * sx0);
-  const newPosY = Math.round(grp.posY - (ctn.ctnY - effCtnY) * sy0);
+  const newPosY = Math.round(grp._basePosY - (ctn.ctnY - effCtnY) * sy0);
 
   if (newH !== grp.h || newW !== grp.w || newPosY !== grp.posY) {
     grp.h    = newH;
