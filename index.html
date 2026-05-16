@@ -594,6 +594,9 @@
             <td><select id="gpNuance" oninput="owUpdateGrp('nuance')" style="width:160px;">
               <option value="">—</option>
             </select></td></tr>
+        <tr><td>Transposition :</td>
+            <td><button id="gpTransposition" onclick="owUpdateGrp('transposition')"
+                style="width:80px;font-weight:bold;">Oui</button></td></tr>
       </tbody>
     </table>
   </div>
@@ -1286,7 +1289,7 @@ function owAjouterGroupe() {
     sectionId: sec.id,
     posX: 20, posY: sec.posY + 20,
     w: 120, h: 60,
-    color: '#c8dcff', opacity: 0.5, nuance: ''
+    color: '#c8dcff', opacity: 0.5, nuance: '', transposition: true
   };
   owGroups.push(grp);
   owActiveGrp = grp.id;
@@ -1318,6 +1321,10 @@ function owParamsGroupe() {
   document.getElementById('gpH').value        = grp.h;
   document.getElementById('gpColor').value    = grp.color;
   document.getElementById('gpOpacity').value  = grp.opacity;
+  const transp = grp.transposition !== false;
+  const btnT = document.getElementById('gpTransposition');
+  btnT.textContent = transp ? 'Oui' : 'Non';
+  btnT.style.background = transp ? '#b8e4b8' : '#f0c0c0';
   // Reconstruire le select nuances
   const sel = document.getElementById('gpNuance');
   sel.innerHTML = '<option value="">—</option>';
@@ -1342,6 +1349,13 @@ function owUpdateGrp(param) {
     case 'color':   grp.color   = document.getElementById('gpColor').value; break;
     case 'opacity': grp.opacity = parseFloat(document.getElementById('gpOpacity').value)||0.5; break;
     case 'nuance':  grp.nuance  = document.getElementById('gpNuance').value; break;
+    case 'transposition': {
+      grp.transposition = !grp.transposition;
+      const btn = document.getElementById('gpTransposition');
+      btn.textContent = grp.transposition ? 'Oui' : 'Non';
+      btn.style.background = grp.transposition ? '#b8e4b8' : '#f0c0c0';
+      break;
+    }
   }
   owModified = true;
   const el = document.getElementById('grp' + grp.id);
