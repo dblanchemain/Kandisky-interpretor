@@ -3506,13 +3506,12 @@ function owRefreshAll() {
 //  WORKSPACE : adapte #work à la fenêtre visible
 // ═══════════════════════════════════════════════
 function owUpdateWorkspace() {
-  const sec  = document.getElementById('secondaire');
-  const w    = sec ? sec.clientWidth  : (window.innerWidth  - 200);
-  const h    = window.innerHeight - 26 - 38; // menuBar + paramGlobal
+  const sec   = document.getElementById('secondaire');
+  const w     = sec ? sec.clientWidth : (window.innerWidth - 200);
   const work  = document.getElementById('work');
   const work2 = document.getElementById('work2');
-  if (work)  { work.style.width  = w + 'px'; work.style.height  = (h + 30) + 'px'; }
-  if (work2) {                                work2.style.height =  h       + 'px'; }
+  if (work)  { work.style.width  = w + 'px'; work.style.height = (window.innerHeight - 70)  + 'px'; }
+  if (work2) {                                work2.style.height = (window.innerHeight - 100) + 'px'; }
 }
 owUpdateWorkspace();
 window.addEventListener('resize', owUpdateWorkspace);
