@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog, protocol } = require('electron');
 const path   = require('path');
 const fs     = require('fs');
+const net    = require('net');
 const dgram  = require('dgram');
 const { spawn } = require('child_process');
 
@@ -201,9 +202,15 @@ ipcMain.handle('audiosSaveFile', (_, partitionPath, subfolder, filename, data) =
 });
 
 // ── Serveur audio Python (audio_server.py) ────────────────────────────────────
+const AUDIO_SERVER_PORT = 9876;
 let audioServerProc = null;
 
-function spawnAudioServer() {
+function _notifyAudioServerReady() {
+  console.log('[AudioServer] Prêt sur port', AUDIO_SERVER_PORT);
+  win?.webContents.send('fromMain', 'audioServerReady');
+}
+
+function _doSpawnAudioServer() {
   const pyScript = path.join(__dirname, 'audio_server.py');
   if (!fs.existsSync(pyScript)) {
     console.warn('[AudioServer] audio_server.py introuvable');
@@ -221,8 +228,7 @@ function spawnAudioServer() {
       const line = buf.slice(0, nl).trim();
       buf = buf.slice(nl + 1);
       if (line === 'AUDIO_SERVER_READY') {
-        console.log('[AudioServer] Prêt');
-        win?.webContents.send('fromMain', 'audioServerReady');
+        _notifyAudioServerReady();
       } else if (line) {
         process.stdout.write('[AudioServer] ' + line + '\n');
       }
@@ -232,6 +238,25 @@ function spawnAudioServer() {
   audioServerProc.on('exit', (code, sig) => {
     console.log('[AudioServer] Terminé (code=' + code + ', signal=' + sig + ')');
     audioServerProc = null;
+  });
+}
+
+function spawnAudioServer() {
+  // Si quelque chose écoute déjà sur le port, l'utiliser directement
+  const probe = net.createConnection({ port: AUDIO_SERVER_PORT, host: '127.0.0.1' });
+  probe.setTimeout(300);
+  probe.on('connect', () => {
+    probe.destroy();
+    console.log('[AudioServer] Serveur déjà actif — réutilisation');
+    _notifyAudioServerReady();
+  });
+  probe.on('error', () => {
+    probe.destroy();
+    _doSpawnAudioServer();
+  });
+  probe.on('timeout', () => {
+    probe.destroy();
+    _doSpawnAudioServer();
   });
 }
 
