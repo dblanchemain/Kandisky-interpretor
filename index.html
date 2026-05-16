@@ -1707,10 +1707,11 @@ function owTrAugm(objs, val) {
 
 function owTrExpansion(objs, val) {
   if (objs.length <= 1) return objs.map(o => ({...o}));
+  const valPx = val * 18;
   const res = [{...objs[0]}];
   for (let i = 1; i < objs.length; i++) {
     const interval = objs[i].posX - objs[i - 1].posX;
-    res.push({...objs[i], posX: res[i - 1].posX + interval + val});
+    res.push({...objs[i], posX: res[i - 1].posX + interval + valPx});
   }
   return res;
 }
