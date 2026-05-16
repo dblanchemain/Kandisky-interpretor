@@ -106,14 +106,10 @@
     /* ── Layout principal ── */
     #principal {
       top: 26px !important;
-      height: calc(100vh - 26px) !important;
-      overflow: hidden !important;
     }
     #secondaire {
       top: 26px !important;
       left: 200px !important;
-      width: calc(100vw - 200px) !important;
-      height: calc(100vh - 26px) !important;
       overflow: hidden !important;
     }
 
@@ -3507,17 +3503,21 @@ function owRefreshAll() {
 //  WORKSPACE : adapte #work à la fenêtre visible
 // ═══════════════════════════════════════════════
 function owUpdateWorkspace() {
-  const sec   = document.getElementById('secondaire');
-  const w     = sec ? sec.clientWidth : (window.innerWidth - 200);
+  const h = window.innerHeight - 26;   // comme kandiskyscore3 : mainwinheight - 30 ≈ ici - 26
+
+  const principal = document.getElementById('principal');
+  const sec       = document.getElementById('secondaire');
+  if (principal) principal.style.height = h + 'px';
+  if (sec)       { sec.style.height = h + 'px'; sec.style.width = (window.innerWidth - 200) + 'px'; }
+
   const work  = document.getElementById('work');
   const work2 = document.getElementById('work2');
-  if (work)  { work.style.width  = w + 'px'; work.style.height = (window.innerHeight - 70)  + 'px'; }
-  if (work2) {                                work2.style.height = (window.innerHeight - 100) + 'px'; }
+  if (work)  { work.style.width  = (window.innerWidth - 200) + 'px'; work.style.height = (h - 44) + 'px'; }
+  if (work2) {                                                         work2.style.height = (h - 74) + 'px'; }
 
-  // Dimensionner les listes du panneau gauche pour qu'elles tiennent dans #principal
-  const principal = document.getElementById('principal');
-  const secList   = document.getElementById('owSectionList');
-  const nuPal     = document.getElementById('owNuancePalette');
+  // Dimensionner les listes du panneau gauche pour éviter tout débordement
+  const secList = document.getElementById('owSectionList');
+  const nuPal   = document.getElementById('owNuancePalette');
   if (principal && secList && nuPal) {
     let fixedH = 0;
     for (const child of principal.children) {
@@ -3525,7 +3525,7 @@ function owUpdateWorkspace() {
       const cs = getComputedStyle(child);
       fixedH += child.offsetHeight + parseFloat(cs.marginTop) + parseFloat(cs.marginBottom);
     }
-    const avail = Math.max(40, principal.clientHeight - fixedH - 8);
+    const avail = Math.max(40, h - fixedH - 8);
     secList.style.maxHeight = Math.round(avail * 0.62) + 'px';
     nuPal.style.maxHeight   = Math.round(avail * 0.38) + 'px';
   }
