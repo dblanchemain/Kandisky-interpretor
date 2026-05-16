@@ -1489,7 +1489,7 @@ function owSonRemplirUI() {
 function owSonSetDevice(val) {
   const status = document.getElementById('owSonStatus');
   owSonDeviceIndex = val ? parseInt(val) : null;
-  owAudioSend({ cmd: 'set_device', device: owSonDeviceIndex });
+  owAudioSend({ cmd: 'set_device', device: owSonDeviceIndex, channels: owSpatialPrefs.nbCanaux });
   if (status) status.textContent = 'Changement en cours…';
 }
 
@@ -1527,6 +1527,7 @@ function owSpatialGreffon() {
 function owSpatialCalcOrdre() {
   const n = parseInt(document.getElementById('spHoaNbCanaux')?.value) || 4;
   owSpatialPrefs.nbCanaux = n;
+  owAudioSend({ cmd: 'set_device', device: owSonDeviceIndex, channels: n });
   const ordre = Math.max(1, Math.floor(Math.sqrt(n) - 1));
   owSpatialPrefs.hoaOrdre = ordre;
   document.getElementById('spHoaOrdre').textContent = ordre;
@@ -1558,6 +1559,7 @@ async function owInitFaust() {
     window.owWamSpat = await owCreateLayout(layout);
     if (status) status.textContent = `Faust : prêt (${layout}, ${window.owWamSpat.P} canaux)`;
     console.log('[Spatialisation] Faust initialisé :', layout, window.owWamSpat);
+    owAudioSend({ cmd: 'set_device', device: owSonDeviceIndex, channels: owSpatialPrefs.nbCanaux });
   } catch(err) {
     if (status) status.textContent = 'Faust : erreur — ' + err.message;
     console.error('[Spatialisation] init Faust :', err);
@@ -3306,8 +3308,7 @@ function owAudioConnect() {
     owAudioWs.onopen = () => {
       owAudioWsReady = true;
       console.log('[AudioWS] Connecté sur port', owAudioWsPort);
-      if (owSonDeviceIndex !== null)
-        owAudioSend({ cmd: 'set_device', device: owSonDeviceIndex });
+      owAudioSend({ cmd: 'set_device', device: owSonDeviceIndex, channels: owSpatialPrefs.nbCanaux });
     };
     owAudioWs.onclose = () => {
       owAudioWsReady = false;
