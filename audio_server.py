@@ -952,6 +952,9 @@ async def cmd_play(ws: "WebSocketServerProtocol", params: dict, reply):
     compensate_delay  = bool(params.get("compensate_delay", False))
     t_sent_ms         = params.get("t_sent")   # horodatage JS (ms)
 
+    file_path = params.get("file", "?")
+    log.info("▶ %s  [%s]", os.path.basename(file_path), voice_id)
+
     t_before = time.time()
 
     try:
@@ -1011,7 +1014,6 @@ async def cmd_play(ws: "WebSocketServerProtocol", params: dict, reply):
         voice = Voice(voice_id, data.astype(np.float32), notify_end=notify_end)
         mixer.add_voice(voice)
         await reply({"type": "playing", "id": voice_id})
-        log.info("Lecture : id=%s  file=%s", voice_id, params.get("file", "?"))
 
     except FileNotFoundError:
         errmsg = f"Fichier introuvable : {params.get('file', '?')}"
