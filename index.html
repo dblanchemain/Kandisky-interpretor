@@ -2148,7 +2148,7 @@ function owComputeGrpObjets(grp) {
   }
   grp.owTableObjets = objs;
   owTableObjets[grp.id] = objs;
-  console.log('[owTableObjets] grp', grp.id, '(' + (grp.name||'') + ')', objs.map(o => (o._origId||o.id) + '.wav → ' + o.id + '.wav'));
+  console.log('[owTableObjets] grp', grp.id, '(' + (grp.name||'') + ')', objs.map(o => (o.file||'?') + ' → ' + o.id + '.wav'));
   return objs;
 }
 
