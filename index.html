@@ -3294,6 +3294,13 @@ function owMoveBarTo(px) {
   bar.style.left = x + 'px';
   owBarVertTime  = x / (OW_BASE_PX * owZoomScale);
   owSetCompteur(x);
+  const work = document.getElementById('work');
+  if (work) {
+    const vis  = work.clientWidth;
+    const sl   = work.scrollLeft;
+    if (x > sl + vis - 40)       work.scrollLeft = x - vis * 0.2;
+    else if (x < sl + 10)        work.scrollLeft = Math.max(0, x - vis * 0.2);
+  }
 }
 
 function owRescheduleAudio() {
