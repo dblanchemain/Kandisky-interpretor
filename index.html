@@ -3163,6 +3163,7 @@ if (typeof window.api !== 'undefined') {
         if (!grpDiv) break;
         interpGrpData[grp.id] = { xml: grpXml, imgBase };
         drawObjets(grpXml, grpDiv, imgBase);
+        owComputeGrpObjets(grp);
         break;
       }
       case 'audioServerReady':
