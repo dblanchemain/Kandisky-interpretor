@@ -2092,19 +2092,21 @@ async function owMiseANiveauAudio(grp) {
   let count = 0;
   for (const newObj of newObjs) {
     const origObj = origObjs.find(o => o.id === newObj.id);
-    console.log('[Audio] newObj', newObj.id, 'posY:', newObj.posY, '→ origObj:', origObj?.id, 'file:', origObj?.file, 'flagTranspo:', origObj?.flagTranspo);
-    if (!origObj?.file) { console.log('[Audio] skip — pas de file'); continue; }
+    console.log('[Audio] newObj', newObj.id, 'posY:', newObj.posY, '→ origObj:', origObj?.id, 'flagTranspo:', origObj?.flagTranspo);
+    if (!origObj) { console.log('[Audio] skip — origObj introuvable'); continue; }
     if (origObj.flagTranspo === 0) { console.log('[Audio] skip — flagTranspo=0'); continue; }
 
+    const filename = origObj.id + '-fx.wav';
     const origRef = owPitchRef(origObj);
     const newRef  = owPitchRef(newObj);
     const origFactor = (SPACE_H - origRef) / (SPACE_H / 2);
     const newFactor  = (SPACE_H - newRef)  / (SPACE_H / 2);
-    if (origFactor <= 0 || newFactor <= 0) continue;
+    console.log('[Audio]', filename, 'origRef:', origRef, 'newRef:', newRef, 'facteurs:', origFactor.toFixed(3), '→', newFactor.toFixed(3));
+    if (origFactor <= 0 || newFactor <= 0) { console.log('[Audio] skip — facteur ≤ 0'); continue; }
     const relativeFactor = newFactor / origFactor;
-    if (Math.abs(relativeFactor - 1) < 0.001) continue;
+    if (Math.abs(relativeFactor - 1) < 0.001) { console.log('[Audio] skip — pas de changement'); continue; }
 
-    const raw = await window.api.readAudioFile(owFilePath, origObj.file);
+    const raw = await window.api.readAudioFile(owFilePath, filename);
     if (!raw) { console.warn('[Audio] fichier introuvable :', origObj.file); continue; }
 
     const rawAb = raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength);
@@ -2124,7 +2126,7 @@ async function owMiseANiveauAudio(grp) {
     const rendered = await offCtx.startRendering();
 
     const wavData = owAudioBufferToWav(rendered);
-    await window.api.saveAudioFile(owFilePath, 'interprété', origObj.file, wavData);
+    await window.api.saveAudioFile(owFilePath, 'interprété', filename, wavData);
     count++;
   }
 
