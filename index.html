@@ -3334,7 +3334,11 @@ function owAudioSend(obj) {
     owAudioWs.send(JSON.stringify(obj));
 }
 
+let _owPlayTimers = [];
+
 function owStopAudio() {
+  _owPlayTimers.forEach(t => clearTimeout(t));
+  _owPlayTimers = [];
   owAudioSend({ cmd: 'stop' });
 }
 
@@ -3369,7 +3373,7 @@ async function owStartAudio() {
       const waitMs = Math.max(0, Math.round(delay * 1000) - (Date.now() - t0));
       const vid    = String(obj.id);
       const fp     = absPath;
-      setTimeout(() => owAudioSend({ cmd: 'play', id: vid, file: fp, notify_end: false }), waitMs);
+      _owPlayTimers.push(setTimeout(() => owAudioSend({ cmd: 'play', id: vid, file: fp, notify_end: false }), waitMs));
       count++;
     }
   }
