@@ -840,6 +840,10 @@ let owImagesDir  = '';
 let interpGrpData = {};   // {grpId: {xml, imgBase}} — cache XMLs de groupe
 let owTableObjets = {};  // {grpId: [{posX,posY,...}]} — objets audio transformés par groupe
 let owModified   = false;
+function owSetModified(val) {
+  owModified = val;
+  window.api?.nsmDirty?.(val);
+}
 let owTempoPoints = [];   // [{id,X,Y}]  X=pixels, Y=0..100  bpm=240-Y/0.4167
 let owGainPoints  = [];   // [{id,X,Y}]  gain=(100-Y)*0.05
 let owNbTempo = 1, owNbGain = 1;
@@ -919,7 +923,7 @@ function owNouveau() {
   if (owModified && !confirm('Nouveau projet ? Les modifications non sauvegardées seront perdues.')) return;
   owSections = []; owGroups = []; owNuanceInsts = [];
   owNextSecId = 1; owNextGrpId = 1; owNextNuInstId = 1;
-  owActiveGrp = null; owActiveSec = null; owFilePath = null; owModified = false;
+  owActiveGrp = null; owActiveSec = null; owFilePath = null; owSetModified(false);
   interpGrpData = {};
   owTempoBySection = {}; owGainBySection = {}; owNuanceInstsBySection = {};
   owTempoPoints = []; owGainPoints = []; owNbTempo = 1; owNbGain = 1;
@@ -1090,7 +1094,7 @@ function owParseData(txt, label) {
     owNextSecId = secId;
     owNextGrpId = grpId;
     owActiveGrp = null;
-    owModified  = false;
+    owSetModified(false);
     owActiveSec = owSections.length ? owSections[0].id : null;
     owLoadSectionCurves(owActiveSec);
     owCloseAllPopups();
@@ -1186,7 +1190,7 @@ function owTelecharger(nom, contenu) {
   a.download = nom.endsWith('.xml') ? nom : nom + '.xml';
   a.click();
   URL.revokeObjectURL(url);
-  owModified = false;
+  owSetModified(false);
 }
 
 function owExporterInterpretor() {
@@ -1232,7 +1236,7 @@ function owAjouterSection() {
     owLoadSectionCurves(newId);
     owRebuildTempoPoints();
   }
-  owModified = true;
+  owSetModified(true);
   owRenderAll();
 }
 
@@ -1257,7 +1261,7 @@ function owSupprimerSection() {
     owLoadSectionCurves(owActiveSec);
     owRebuildTempoPoints();
   }
-  owModified = true;
+  owSetModified(true);
   owRenderAll();
 }
 
@@ -1291,7 +1295,7 @@ function owDoPermuter() {
   s1.posY = s2.posY;
   s2.posY = tmp;
   document.getElementById('permutPopup').style.display = 'none';
-  owModified = true;
+  owSetModified(true);
   owRenderAll();
 }
 
@@ -1313,7 +1317,7 @@ function owAjouterGroupe() {
   };
   owGroups.push(grp);
   owActiveGrp = grp.id;
-  owModified  = true;
+  owSetModified(true);
   owRenderAll();
   owUpdateInfo();
 }
@@ -1326,7 +1330,7 @@ function owSupprimerGroupe() {
   if (!confirm('Supprimer le groupe « ' + grp.name + ' » ?')) return;
   owGroups    = owGroups.filter(g => g.id !== owActiveGrp);
   owActiveGrp = null;
-  owModified  = true;
+  owSetModified(true);
   owRenderAll();
   owUpdateInfo();
 }
@@ -1377,7 +1381,7 @@ function owUpdateGrp(param) {
       break;
     }
   }
-  owModified = true;
+  owSetModified(true);
   const el = document.getElementById('grp' + grp.id);
   if (el) owApplyGrpStyle(el, grp);
 }
@@ -1620,7 +1624,7 @@ function owApplyNuance(nom) {
   /* Rafraîchir */
   if (document.getElementById('grpInfoPopup').style.display !== 'none') owShowGrpInfo(grp);
   owBuildNuancePalette();
-  owModified = true;
+  owSetModified(true);
 }
 
 /* ── Crée le SVG inline d'un glyphe de nuance ── */
@@ -1658,7 +1662,7 @@ function owMakeNuanceInstEl(inst) {
       owDrawGain();
     }
     div.remove();
-    owModified = true;
+    owSetModified(true);
   });
   space.appendChild(div);
 }
@@ -1689,7 +1693,7 @@ function owDragNuanceInst(el, inst, startEvt) {
   document.onmouseup = function() {
     document.onmousemove = null;
     document.onmouseup   = null;
-    if (dragged) owModified = true;
+    if (dragged) owSetModified(true);
   };
 }
 
@@ -1716,7 +1720,7 @@ function owBuildNuancesTable() {
 function owNuanceVal(inp) {
   owNuances[parseInt(inp.dataset.idx)].val = parseInt(inp.value) || 0;
   owBuildNuancePalette();
-  owModified = true;
+  owSetModified(true);
 }
 
 function owAjouterNuance() {
@@ -1724,7 +1728,7 @@ function owAjouterNuance() {
   if (!nom) return;
   owNuances.push({nom, val: 60});
   owBuildNuancesTable();
-  owModified = true;
+  owSetModified(true);
 }
 
 function owSupprimerNuance() {
@@ -1733,7 +1737,7 @@ function owSupprimerNuance() {
   if (!confirm('Supprimer « ' + last.nom + ' » ?')) return;
   owNuances.pop();
   owBuildNuancesTable();
-  owModified = true;
+  owSetModified(true);
 }
 
 // ═══════════════════════════════════════════════
@@ -1931,7 +1935,7 @@ function owGrpPlayValidate() {
   }
 
   grp.dir = dirVal;
-  owModified = true;
+  owSetModified(true);
   const div = document.getElementById('grp' + grp.id);
   if (div) {
     owApplyGrpStyle(div, grp);
@@ -2005,7 +2009,7 @@ function owGrpCopier(grp) {
   interpGrpData[newGrp.id] = { xml: newXml, imgBase: data.imgBase };
   owGroups.push(newGrp);
   owActiveGrp = newGrp.id;
-  owModified = true;
+  owSetModified(true);
   owRenderGroups();
   owUpdateInfo();
 }
@@ -2268,7 +2272,7 @@ function owDrawTransformOverlay(grp, grpDiv) {
     grp.posY = newPosY;
     owApplyGrpStyle(grpDiv, grp);
     grpDiv.style.top = grp.posY + 'px';
-    owModified = true;
+    owSetModified(true);
   }
 
   objs.forEach(o => {
@@ -2905,7 +2909,7 @@ function owDragElement(elmnt, grpData, startEvt) {
     if (dragged) {
       owApplyPosConstraints(grpData);
       elmnt.style.left = grpData.posX + 'px';
-      owModified = true;
+      owSetModified(true);
     }
   }
 }
@@ -2926,7 +2930,7 @@ function owResizeElement(elmnt, grpData, startEvt) {
   document.onmouseup = function() {
     document.onmousemove = null;
     document.onmouseup   = null;
-    owModified = true;
+    owSetModified(true);
     const d = interpGrpData[grpData.id];
     if (d) {
       drawObjets(d.xml, elmnt, d.imgBase);
@@ -3002,7 +3006,7 @@ function owCreatePointEl(id, x, y, color, arr, drawFn, titleFn) {
       const i = arr.findIndex(p => p.id === id);
       if (i > -1) arr.splice(i, 1);
       drawFn();
-      owModified = true;
+      owSetModified(true);
       return;
     }
     owDragPoint(el, id, arr, drawFn, titleFn, e);
@@ -3028,7 +3032,7 @@ function owDragPoint(el, id, arr, drawFn, titleFn, startEvt) {
   document.onmouseup = function() {
     document.onmousemove = null;
     document.onmouseup   = null;
-    owModified = true;
+    owSetModified(true);
   };
 }
 
@@ -3038,7 +3042,7 @@ function owInsertTempoPoint(x, y) {
   owTempoPoints.sort((a, b) => a.X - b.X);
   owCreatePointEl(id, x, y, 'green', owTempoPoints, owDrawTempo, owTempoPointTitle);
   owDrawTempo();
-  owModified = true;
+  owSetModified(true);
 }
 function owInsertGainPoint(x, y) {
   const id = 'owgna' + owNbGain++;
@@ -3046,7 +3050,7 @@ function owInsertGainPoint(x, y) {
   owGainPoints.sort((a, b) => a.X - b.X);
   owCreatePointEl(id, x, y, '#c33', owGainPoints, owDrawGain, owGainPointTitle);
   owDrawGain();
-  owModified = true;
+  owSetModified(true);
   return id;
 }
 
@@ -3134,7 +3138,7 @@ if (typeof window.api !== 'undefined') {
     switch (cmd) {
       case 'owSaved':
         owFilePath = rest;
-        owModified = false;
+        owSetModified(false);
         document.getElementById('owFileLabel').textContent = rest.split(/[\\/]/).at(-1);
         break;
       case 'owLoaded': {

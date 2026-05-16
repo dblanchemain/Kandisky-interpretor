@@ -14,4 +14,7 @@ contextBridge.exposeInMainWorld('api', {
   // Audios
   readAudioFile:  (partitionPath, filename)              => ipcRenderer.invoke('audiosReadFile', partitionPath, filename),
   saveAudioFile:  (partitionPath, subfolder, filename, data) => ipcRenderer.invoke('audiosSaveFile', partitionPath, subfolder, filename, data),
+
+  // NSM – signaler dirty/clean au gestionnaire de session
+  nsmDirty: (dirty) => ipcRenderer.send('nsmDirty', dirty),
 });
