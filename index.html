@@ -1586,6 +1586,7 @@ function owOpenGrpPlayPopup(grp, divEl) {
   if (grp.retrograde)     opts.push(['retrograde',    'Rétrograde']);
   if (grp.renvRetrograde) opts.push(['renvRetrograde','Renv.+Rétrograde']);
   if (!opts.length)       opts.push(['direct', 'Direct']);
+  opts.push(['copy', 'Copie']);
   opts.forEach(([v, l]) => sel.appendChild(new Option(l, v)));
   sel.value = grp.dir || opts[0][0];
 
@@ -1622,20 +1623,92 @@ function owGrpPlayValidate() {
   if (grpPlayEditId === null) return;
   const grp = owGroups.find(g => g.id === grpPlayEditId);
   if (!grp) { owGrpPlayCancel(); return; }
-  grp.dir = document.getElementById('grpPlayLecture').value;
+  const dirVal = document.getElementById('grpPlayLecture').value;
   if (grp.augDim)    grp.augDimVal    = parseFloat(document.getElementById('grpPlayAugm').value)      || 0;
   if (grp.expansion) grp.expansionVal = parseFloat(document.getElementById('grpPlayExpansion').value) || 0;
 
-  owModified = true;
   document.getElementById('grpPlayPopup').style.display = 'none';
   grpPlayEditId = null;
 
+  if (dirVal === 'copy') {
+    owComputeGrpObjets(grp);
+    owGrpCopier(grp);
+    return;
+  }
+
+  grp.dir = dirVal;
+  owModified = true;
   const div = document.getElementById('grp' + grp.id);
   if (div) {
     owApplyGrpStyle(div, grp);
     owComputeGrpObjets(grp);
     owDrawTransformOverlay(grp, div);
   }
+}
+
+function owGrpCopier(grp) {
+  const objs = grp.owTableObjets;
+  if (!objs || !objs.length) return;
+
+  const data = interpGrpData[grp.id];
+  if (!data) return;
+
+  // Mettre à jour les posX/posY dans le XML par matching d'ID
+  const safeXml = data.xml.replace(/&(?!amp;|lt;|gt;|quot;|apos;|#\d+;|#x[\da-fA-F]+;)/g, '&amp;');
+  const doc = new DOMParser().parseFromString(safeXml, 'application/xml');
+  if (doc.querySelector('parsererror')) return;
+
+  function setVal(el, tag, value) {
+    const child = el.querySelector(tag);
+    if (child) child.setAttribute('value', String(value));
+  }
+
+  const allEls = [...doc.querySelectorAll('objet')];
+  for (const o of objs) {
+    const el = allEls.find(e => e.getAttribute('id') === String(o.id));
+    if (el) { setVal(el, 'posx', o.posX); setVal(el, 'posy', o.posY); }
+  }
+
+  // Adapter le conteneur (class 4) aux bornes des objets transformés
+  const minX = Math.min(...objs.map(o => o.posX));
+  const minY = Math.min(...objs.map(o => o.posY));
+  const maxX = Math.max(...objs.map(o => o.posX + (o.bkgWidth  || 0)));
+  const maxY = Math.max(...objs.map(o => o.posY + (o.bkgHeight || 0)));
+  const ctnEl = allEls.find(e => {
+    const c = e.querySelector('class'); return c && parseInt(c.getAttribute('value')) === 4;
+  });
+  if (ctnEl) {
+    setVal(ctnEl, 'posx', minX);      setVal(ctnEl, 'posy', minY);
+    setVal(ctnEl, 'bkgwidth',  maxX - minX);
+    setVal(ctnEl, 'bkgheight', maxY - minY);
+  }
+
+  const newXml = new XMLSerializer().serializeToString(doc);
+
+  // Créer le nouveau groupe
+  const newGrp = {
+    id: owNextGrpId++,
+    name: grp.name + ' copie',
+    sectionId: grp.sectionId,
+    posX: grp.posX + 20, posY: grp.posY + 20,
+    w: grp._baseW ?? grp.w, h: grp._baseH ?? grp.h,
+    color: grp.color, opacity: grp.opacity, nuance: '',
+    direct: true, renversement: false, retrograde: false, renvRetrograde: false,
+    repetition: false, repetitionMax: 2, transposition: false,
+    augDim: false, augDimMin: -2, augDimMax: 2, augDimVal: 0,
+    expansion: false, expansionMin: -5, expansionMax: 5, expansionVal: 0,
+    variationTempo: false, variationIntensite: false,
+    posRelDebut: false, posRelDebutAvant: '', posRelDebutGroupe: '',
+    posRelFin: false, posRelFinAvant: '', posRelFinGroupe: '',
+    dir: 'direct'
+  };
+
+  interpGrpData[newGrp.id] = { xml: newXml, imgBase: data.imgBase };
+  owGroups.push(newGrp);
+  owActiveGrp = newGrp.id;
+  owModified = true;
+  owRenderGroups();
+  owUpdateInfo();
 }
 
 // ═══════════════════════════════════════════════
