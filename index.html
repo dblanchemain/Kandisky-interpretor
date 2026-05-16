@@ -2190,7 +2190,7 @@ async function owMiseANiveauAudio(grp) {
     if (!origObj) continue;
     if (origObj.flagTranspo === 0) continue;
 
-    const filename = origObj.id + '-fx.wav';
+    const filename = origObj.id + '.wav';
     const origRef = owPitchRef(origObj);
     const newRef  = owPitchRef(newObj);
     const origFactor = (SPACE_H - origRef) / (SPACE_H / 2);
@@ -3362,7 +3362,7 @@ async function owStartAudio() {
       const delay   = objTime - barTime;
       if (delay < -0.05) continue;
 
-      const filename = obj.id + '-fx.wav';
+      const filename = obj.id + '.wav';
       const absPath  = await window.api?.resolveAudioPath?.(owFilePath, filename);
       if (!absPath) continue;
 

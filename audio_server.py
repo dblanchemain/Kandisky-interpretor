@@ -820,9 +820,9 @@ _raw_cache_lock = threading.Lock()
 
 def _cached_sf_read(file_path: str) -> tuple[np.ndarray, int]:
     """sf.read() avec cache en mémoire, invalidé automatiquement si le fichier change.
-    Les fichiers *-fx.wav sont toujours relus depuis le disque (évite les lectures périmées
-    lors du chargement de projet où readSimpleAudioA regénère les fichiers de façon asynchrone)."""
-    if file_path.endswith('-fx.wav'):
+    Les fichiers du dossier interprete/ sont toujours relus depuis le disque (évite les lectures
+    périmées lors du traitement audio qui regénère ces fichiers de façon asynchrone)."""
+    if '/interprete/' in file_path or '\\interprete\\' in file_path:
         data, sr = sf.read(file_path, dtype="float32", always_2d=True)
         return data, sr
     try:
@@ -1019,9 +1019,9 @@ async def cmd_preload(ws: "WebSocketServerProtocol", msg: dict, reply):
     """Pré-charge un fichier audio en mémoire sans le lire."""
     file_path = msg.get("file", "")
     try:
-        # Pour les *-fx.wav : toujours relire (bypass cache), donc never "already"
-        is_fx = file_path.endswith('-fx.wav')
-        already = (not is_fx) and (file_path in _raw_cache)
+        # Fichiers interprete/ : toujours relire (bypass cache)
+        is_interp = '/interprete/' in file_path or '\\interprete\\' in file_path
+        already = (not is_interp) and (file_path in _raw_cache)
         if not already:
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(None, _cached_sf_read, file_path)
