@@ -2158,8 +2158,8 @@ function owAudioBufferToWav(buf) {
   const w  = (off, val, n) => { for (let i=0;i<n;i++) v.setUint8(off+i,(val>>(i*8))&0xff); };
   const ws = (off, s)      => { for (let i=0;i<s.length;i++) v.setUint8(off+i,s.charCodeAt(i)); };
   ws(0,'RIFF'); w(4,ab.byteLength-8,4); ws(8,'WAVE'); ws(12,'fmt ');
-  w(16,16,4); w(20,1,2); w(22,ch,2); w(24,sr,4); w(28,sr*ch*2,4); w(32,ch*2,2); w(36,16,2);
-  ws(38,'data'); w(42,len*ch*2,4);
+  w(16,16,4); w(20,1,2); w(22,ch,2); w(24,sr,4); w(28,sr*ch*2,4); w(32,ch*2,2); w(34,16,2);
+  ws(36,'data'); w(40,len*ch*2,4);
   let off=44;
   for (let i=0;i<len;i++) for (let c=0;c<ch;c++) {
     const s=Math.max(-1,Math.min(1,buf.getChannelData(c)[i]));
