@@ -1428,6 +1428,7 @@ async function owSpatialVbapLayout() {
   body.innerHTML = layout.speakers.map((s, i) =>
     `<tr><td>${i+1}</td><td>${s.x}</td><td>${s.y}</td><td>${s.z}</td><td>${s.d}</td></tr>`
   ).join('');
+  owInitFaust().catch(e => console.warn('[Spatialisation] init :', e.message));
 }
 
 async function owInitFaust() {
