@@ -2384,6 +2384,7 @@ function owDragElement(elmnt, grpData, startEvt) {
     grpData.posX = elmnt.offsetLeft - p1;
     grpData.posY = Math.max(0, elmnt.offsetTop - p2);
     owApplyPosConstraints(grpData);
+    if (grpData._basePosY !== undefined) grpData._basePosY += grpData.posY - prevY;
     const dx = grpData.posX - prevX, dy = grpData.posY - prevY;
     elmnt.style.left = grpData.posX + 'px';
     elmnt.style.top  = grpData.posY + 'px';
@@ -2423,6 +2424,8 @@ function owResizeElement(elmnt, grpData, startEvt) {
   document.onmousemove = function(e) {
     grpData.w = Math.max(60,  startW + (e.clientX - startX));
     grpData.h = Math.max(50,  startH + (e.clientY - startY));
+    grpData._baseW = grpData.w;
+    grpData._baseH = grpData.h;
     elmnt.style.width  = grpData.w + 'px';
     elmnt.style.height = grpData.h + 'px';
   };
