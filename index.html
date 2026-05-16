@@ -2053,6 +2053,44 @@ function owComputeGrpObjets(grp) {
   return objs;
 }
 
+// ─── Décodeur WAV manuel (fallback à decodeAudioData) ───────────────────────
+function owDecodeWavManual(ab) {
+  const v = new DataView(ab);
+  const rs = (off, n) => Array.from({length:n}, (_,i) => String.fromCharCode(v.getUint8(off+i))).join('');
+  if (rs(0,4) !== 'RIFF' || rs(8,4) !== 'WAVE') throw new Error('Not WAV');
+  let off = 12, fmt = null, dataOff = 0, dataSize = 0;
+  while (off < ab.byteLength - 8) {
+    const id = rs(off, 4);
+    const sz = v.getUint32(off + 4, true);
+    off += 8;
+    if (id === 'fmt ') {
+      fmt = { af: v.getUint16(off,true), ch: v.getUint16(off+2,true),
+               sr: v.getUint32(off+4,true), bps: v.getUint16(off+14,true) };
+    } else if (id === 'data') { dataOff = off; dataSize = sz; }
+    off += sz + (sz % 2);
+    if (fmt && dataOff) break;
+  }
+  if (!fmt || !dataOff) throw new Error('WAV invalide');
+  const { af, ch, sr, bps } = fmt;
+  const frames = Math.floor(dataSize / (ch * bps / 8));
+  const ctx = new AudioContext();
+  const buf = ctx.createBuffer(ch, frames, sr);
+  ctx.close();
+  for (let c = 0; c < ch; c++) {
+    const d = buf.getChannelData(c);
+    const stride = ch * bps / 8;
+    for (let i = 0; i < frames; i++) {
+      const o = dataOff + i * stride + c * bps / 8;
+      if      (bps === 8)               d[i] = (v.getUint8(o) - 128) / 128;
+      else if (bps === 16)              d[i] = v.getInt16(o, true) / 32768;
+      else if (bps === 24) { const lo=v.getUint8(o), mi=v.getUint8(o+1), hi=v.getInt8(o+2); d[i]=((hi<<16)|(mi<<8)|lo)/8388608; }
+      else if (bps === 32 && af === 3)  d[i] = v.getFloat32(o, true);
+      else if (bps === 32)              d[i] = v.getInt32(o, true) / 2147483648;
+    }
+  }
+  return buf;
+}
+
 // ─── Encodage WAV 16 bits PCM ────────────────────────────────────────────────
 function owAudioBufferToWav(buf) {
   const ch = buf.numberOfChannels, sr = buf.sampleRate, len = buf.length;
@@ -2109,12 +2147,17 @@ async function owMiseANiveauAudio(grp) {
     const raw = await window.api.readAudioFile(owFilePath, filename);
     if (!raw) { console.warn('[Audio] fichier introuvable :', origObj.file); continue; }
 
-    const rawAb = raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength);
-    const tmpCtx = new AudioContext();
+    const rawAb = new Uint8Array(raw).buffer;
     let audioBuf;
-    try { audioBuf = await tmpCtx.decodeAudioData(rawAb); }
-    catch(e) { console.warn('[Audio] décodage échoué :', origObj.file, e.message); await tmpCtx.close(); continue; }
-    await tmpCtx.close();
+    try {
+      const tmpCtx = new AudioContext();
+      audioBuf = await tmpCtx.decodeAudioData(rawAb.slice(0));
+      await tmpCtx.close();
+    } catch(e) {
+      console.warn('[Audio] decodeAudioData échoué, fallback WAV manuel :', filename, e.message);
+      try { audioBuf = owDecodeWavManual(rawAb); }
+      catch(e2) { console.warn('[Audio] décodage manuel échoué :', filename, e2.message); continue; }
+    }
 
     const newLen = Math.max(1, Math.round(audioBuf.length / relativeFactor));
     const offCtx = new OfflineAudioContext(audioBuf.numberOfChannels, newLen, audioBuf.sampleRate);
