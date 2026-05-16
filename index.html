@@ -3226,8 +3226,8 @@ function playerSuiv() {
   owRescheduleAudio();
 }
 
-// ─── Lecture audio : envoi vers le contexte Web Audio ───────────────────────
-let owAudioCtx    = null;
+// ─── Lecture audio : contexte Web Audio créé au démarrage ───────────────────
+let owAudioCtx    = new AudioContext();
 let owPlaySources = [];
 
 function owStopAudio() {
@@ -3239,7 +3239,10 @@ async function owStartAudio() {
   if (!owFilePath || !window.api?.readAudioFile) return;
   if (owActiveSec === null) return;
 
-  if (!owAudioCtx || owAudioCtx.state === 'closed') owAudioCtx = new AudioContext();
+  if (!owAudioCtx || owAudioCtx.state === 'closed') {
+    owAudioCtx = new AudioContext();
+    document.getElementById('owRate').textContent = owAudioCtx.sampleRate;
+  }
   if (owAudioCtx.state === 'suspended') await owAudioCtx.resume();
 
   owStopAudio();
@@ -3317,16 +3320,8 @@ function owRefreshAll() {
   });
 }
 
-// Contexte audio – taux d'échantillonnage
-(function() {
-  try {
-    const ctx = new AudioContext();
-    document.getElementById('owRate').textContent = ctx.sampleRate;
-    ctx.close();
-  } catch(e) {
-    document.getElementById('owRate').textContent = '48000';
-  }
-})();
+// Affichage du taux d'échantillonnage depuis le contexte principal
+document.getElementById('owRate').textContent = owAudioCtx.sampleRate;
 
 // ═══════════════════════════════════════════════
 //  RÉGLETTES + ZOOM
