@@ -921,7 +921,6 @@ async def dispatch(ws: "WebSocketServerProtocol", msg: dict):
     elif cmd == "set_volume":
         db = float(msg.get("db", 0))
         mixer.master_gain = 10 ** (db / 20)
-        log.info("Volume global : %.1f dB (gain=%.4f)", db, mixer.master_gain)
         await reply({"type": "volume_set", "db": db})
 
     elif cmd == "info":
