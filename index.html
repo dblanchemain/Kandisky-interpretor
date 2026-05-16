@@ -2222,12 +2222,12 @@ async function owMiseANiveauAudio(grp) {
     const rendered = await offCtx.startRendering();
 
     const wavData = owAudioBufferToWav(rendered);
-    await window.api.saveAudioFile(owFilePath, 'interprété', filename, wavData);
+    await window.api.saveAudioFile(owFilePath, 'interprete', filename, wavData);
     count++;
   }
 
-  if (status) status.textContent = `Audio : ${count} fichier(s) transposé(s) → Audios/interprété/`;
-  console.log(`[Audio] ${count} fichier(s) → Audios/interprété/`);
+  if (status) status.textContent = `Audio : ${count} fichier(s) transposé(s) → Audios/interprete/`;
+  console.log(`[Audio] ${count} fichier(s) → Audios/interprete/`);
 }
 
 function owDrawTransformOverlay(grp, grpDiv) {

@@ -256,7 +256,7 @@ function spawnAudioServer() {
 ipcMain.handle('resolveAudioPath', (_, partitionPath, filename) => {
   if (!partitionPath) return null;
   const audiosDir = path.join(path.dirname(partitionPath), 'Audios');
-  const p1 = path.join(audiosDir, 'interprété', filename);
+  const p1 = path.join(audiosDir, 'interprete', filename);
   if (fs.existsSync(p1)) return p1;
   const p2 = path.join(audiosDir, filename);
   if (fs.existsSync(p2)) return p2;
