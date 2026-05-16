@@ -550,6 +550,7 @@ class AudioMixer:
         self.sample_rate   = 44100
         self.channels      = 2
         self.device_index: Optional[int] = None
+        self.master_gain   = 1.0
         # Injectés depuis la boucle asyncio pour notifier les fins de voix
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._notify_queue: Optional[asyncio.Queue]     = None
@@ -598,6 +599,7 @@ class AudioMixer:
             for v in ended:
                 self.voices.pop(v.id, None)
 
+        mix *= self.master_gain
         np.clip(mix, -1.0, 1.0, out=mix)
         outdata[:] = mix
 
@@ -915,6 +917,12 @@ async def dispatch(ws: "WebSocketServerProtocol", msg: dict):
                      mixer.channels, mixer.sample_rate)
         await reply({"type": "device_set", "device": mixer.device_index,
                      "channels": mixer.channels, "changed": changed})
+
+    elif cmd == "set_volume":
+        db = float(msg.get("db", 0))
+        mixer.master_gain = 10 ** (db / 20)
+        log.info("Volume global : %.1f dB (gain=%.4f)", db, mixer.master_gain)
+        await reply({"type": "volume_set", "db": db})
 
     elif cmd == "info":
         await cmd_info(ws, msg, reply)

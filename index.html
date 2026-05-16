@@ -456,6 +456,24 @@
       border-radius: 3px;
     }
     #owBtnRefresh:hover { background: #d0e4ff; }
+    #owVolumeBox {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-top: 10px;
+      gap: 4px;
+    }
+    #owVolumeBox label { font-size: 10px; color: #555; }
+    #owVolumeSlider {
+      writing-mode: vertical-lr;
+      direction: rtl;
+      appearance: slider-vertical;
+      -webkit-appearance: slider-vertical;
+      width: 24px;
+      height: 100px;
+      cursor: pointer;
+    }
+    #owVolumeVal { font-size: 10px; color: #333; }
   </style>
 </head>
 <body>
@@ -506,6 +524,15 @@
     <span id="play3" onclick="readPart()" title="Lecture"><svg width='20' height='40' viewBox='0 0 40 90' xmlns='http://www.w3.org/2000/svg'><path d='M0,40 0,5 30,20 0,35' fill='#2373b2' transform='translate(8 34)' stroke='#2373b2' stroke-width='10'/></svg></span>
     <span id="play4" onclick="playerSuiv()" title="Suivant"><svg width='30' height='40' viewBox='0 0 70 90' xmlns='http://www.w3.org/2000/svg'><rect x='0' y='20' width="20" height="20" fill='#2373b2' stroke-width='0' transform='translate(14 24)'/><polyline points='0,40 0,0 40,20 0,40' fill='#2373b2' transform='translate(31 34)' stroke-width='0'/></svg></span>
     <span id="play5" onclick="playerEnd()" title="Fin"><svg width='30' height='40' viewBox='0 0 70 90' xmlns='http://www.w3.org/2000/svg'><rect x='0' y='20' width="20" height="20" fill='#2373b2' stroke-width='0' transform='translate(17 24)'/><polyline points='0,40 0,0 40,20 0,40' fill='#2373b2' transform='translate(34 34)' stroke-width='0'/><rect x='0' y='10' width="10" height="40" fill='#2373b2' stroke-width='0' transform='translate(70 24)'/></svg></span>
+  </div>
+
+  <!-- Slider volume global -->
+  <div id="owVolumeBox">
+    <label for="owVolumeSlider">Vol</label>
+    <input id="owVolumeSlider" type="range" min="-40" max="6" value="0" step="1"
+           title="Volume de sortie global"
+           oninput="owSonSetVolume(this.value)" />
+    <span id="owVolumeVal">0 dB</span>
   </div>
 </div>
 
@@ -1491,6 +1518,13 @@ function owSonSetDevice(val) {
   owSonDeviceIndex = val ? parseInt(val) : null;
   owAudioSend({ cmd: 'set_device', device: owSonDeviceIndex, channels: owSpatialPrefs.nbCanaux });
   if (status) status.textContent = 'Changement en cours…';
+}
+
+function owSonSetVolume(db) {
+  db = parseFloat(db);
+  owAudioSend({ cmd: 'set_volume', db });
+  const lbl = document.getElementById('owVolumeVal');
+  if (lbl) lbl.textContent = (db >= 0 ? '+' : '') + db + ' dB';
 }
 
 // ── Spatialisation ──────────────────────────────
