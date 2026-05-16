@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' blob: 'wasm-unsafe-eval'; img-src 'self' file: data:;"/>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' blob: 'wasm-unsafe-eval'; connect-src ws://127.0.0.1:*; img-src 'self' file: data:;"/>
   <meta http-equiv="content-style-type" content="text/css"/>
   <link rel="stylesheet" type="text/css" media="all" href="score.css" />
   <title>Interpretor</title>
@@ -425,6 +425,37 @@
     }
     .nuance-row label { width: 52px; font-weight: bold; font-size: 0.85em; }
     .nuance-row input[type=number] { width: 70px; }
+
+    /* ── Transport ── */
+    #owTransport {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      padding: 4px 2px;
+      border-bottom: 1px solid #ccc;
+    }
+    #owTransport span {
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      border-radius: 3px;
+      padding: 1px;
+    }
+    #owTransport span:hover { background: #d0e4ff; }
+    #owTransport span.playing svg polyline,
+    #owTransport span.playing svg path,
+    #owTransport span.playing svg rect { fill: #e05; }
+    #owBtnRefresh {
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-left: 6px;
+      padding: 2px;
+      border-radius: 3px;
+    }
+    #owBtnRefresh:hover { background: #d0e4ff; }
   </style>
 </head>
 <body>
@@ -457,10 +488,25 @@
 <!-- ════════════════════════ PANNEAU GAUCHE ════════════════════════ -->
 <div id="principal">
   <h2 style="font-size:0.95em;margin:4px 0;">Interpretor</h2>
+
   <div id="owSectionHeader">Sections</div>
   <div id="owSectionList"></div>
   <div id="owNuanceHeader">Nuances</div>
   <div id="owNuancePalette"></div>
+
+  <!-- Refresh -->
+  <div style="text-align:center;margin-top:14px;">
+    <span id="owBtnRefresh" onclick="owRefreshAll()" title="Mettre à niveau tous les objets"><img src="images/refresh.svg" width="20" height="20"/></span>
+  </div>
+
+  <!-- Boutons transport -->
+  <div id="owTransport" style="margin-top:6px;">
+    <span id="play1" onclick="playerDebut()" title="Début"><svg width='30' height='40' viewBox='0 0 70 90' xmlns='http://www.w3.org/2000/svg'><rect x='0' y='20' width="20" height="20" fill='#2373b2' stroke-width='0' transform='translate(50 24)'/><rect x='0' y='10' width="10" height="40" fill='#2373b2' stroke-width='0' transform='translate(10 24)'/><polyline points='0,20 40,0 40,40 0,20' fill='#2373b2' transform='translate(14 34)' stroke-width='0'/></svg></span>
+    <span id="play2" onclick="playerPrec()" title="Précédent"><svg width='30' height='40' viewBox='0 0 70 90' xmlns='http://www.w3.org/2000/svg'><rect x='0' y='20' width="20" height="20" fill='#2373b2' stroke-width='0' transform='translate(40 24)'/><polyline points='0,20 40,0 40,40 0,20' fill='#2373b2' transform='translate(4 34)' stroke-width='0'/></svg></span>
+    <span id="play3" onclick="readPart()" title="Lecture"><svg width='20' height='40' viewBox='0 0 40 90' xmlns='http://www.w3.org/2000/svg'><path d='M0,40 0,5 30,20 0,35' fill='#2373b2' transform='translate(8 34)' stroke='#2373b2' stroke-width='10'/></svg></span>
+    <span id="play4" onclick="playerSuiv()" title="Suivant"><svg width='30' height='40' viewBox='0 0 70 90' xmlns='http://www.w3.org/2000/svg'><rect x='0' y='20' width="20" height="20" fill='#2373b2' stroke-width='0' transform='translate(14 24)'/><polyline points='0,40 0,0 40,20 0,40' fill='#2373b2' transform='translate(31 34)' stroke-width='0'/></svg></span>
+    <span id="play5" onclick="playerEnd()" title="Fin"><svg width='30' height='40' viewBox='0 0 70 90' xmlns='http://www.w3.org/2000/svg'><rect x='0' y='20' width="20" height="20" fill='#2373b2' stroke-width='0' transform='translate(17 24)'/><polyline points='0,40 0,0 40,20 0,40' fill='#2373b2' transform='translate(34 34)' stroke-width='0'/><rect x='0' y='10' width="10" height="40" fill='#2373b2' stroke-width='0' transform='translate(70 24)'/></svg></span>
+  </div>
 </div>
 
 <!-- ════════════════════════ ESPACE SECONDAIRE ════════════════════════ -->
@@ -529,8 +575,8 @@
 <input type="file" id="owFileInput" style="display:none" accept=".owk,.json" />
 
 <!-- ════════════════════════ POPUP : Paramètres groupe ════════════════════════ -->
-<div id="grpParamsPopup" class="ow-popup" style="top:100px;left:360px;width:360px;">
-  <div id="grpParamsPopupHeader" class="ow-popup-hd">Paramètres du groupe</div>
+<div id="grpParamsPopup" class="ow-popup" style="top:100px;left:360px;width:420px;">
+  <div id="grpParamsPopupHeader" class="ow-popup-hd">Paramètres du cadre</div>
   <div class="ow-popup-body">
     <table border="0" cellpadding="5">
       <tbody>
@@ -548,6 +594,9 @@
             <td><select id="gpNuance" oninput="owUpdateGrp('nuance')" style="width:160px;">
               <option value="">—</option>
             </select></td></tr>
+        <tr><td>Transposition :</td>
+            <td><button id="gpTransposition" onclick="owUpdateGrp('transposition')"
+                style="width:80px;font-weight:bold;">Oui</button></td></tr>
       </tbody>
     </table>
   </div>
@@ -581,6 +630,7 @@
     <div class="pref-tab actif" onclick="owShowPrefTab('nuances')">Nuances</div>
     <div class="pref-tab" onclick="owShowPrefTab('grille')">Grille</div>
     <div class="pref-tab" onclick="owShowPrefTab('spatial');owSpatialRemplirUI()">Spatialisation</div>
+    <div class="pref-tab" onclick="owShowPrefTab('son');owSonRemplirUI()">Son</div>
   </div>
   <div id="prefPaneGrille" class="pref-pane">
     <table border="0" cellpadding="5">
@@ -702,6 +752,25 @@
     </div>
   </div>
 
+  <!-- ── Son ── -->
+  <div id="prefPaneSon" class="pref-pane">
+    <table border="0" cellpadding="5" style="width:100%;">
+      <tr>
+        <td style="white-space:nowrap;">Sortie :</td>
+        <td>
+          <select id="owSonDevice" style="width:100%;" onchange="owSonSetDevice(this.value)">
+            <option value="">— défaut système —</option>
+          </select>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2">
+          <div id="owSonStatus" style="font-size:0.78em;color:#666;margin-top:2px;"></div>
+        </td>
+      </tr>
+    </table>
+  </div>
+
   <div class="ow-popup-foot">
     <button onclick="document.getElementById('prefsPopup').style.display='none'">Fermer</button>
   </div>
@@ -771,6 +840,10 @@ let owImagesDir  = '';
 let interpGrpData = {};   // {grpId: {xml, imgBase}} — cache XMLs de groupe
 let owTableObjets = {};  // {grpId: [{posX,posY,...}]} — objets audio transformés par groupe
 let owModified   = false;
+function owSetModified(val) {
+  owModified = val;
+  window.api?.nsmDirty?.(val);
+}
 let owTempoPoints = [];   // [{id,X,Y}]  X=pixels, Y=0..100  bpm=240-Y/0.4167
 let owGainPoints  = [];   // [{id,X,Y}]  gain=(100-Y)*0.05
 let owNbTempo = 1, owNbGain = 1;
@@ -850,7 +923,7 @@ function owNouveau() {
   if (owModified && !confirm('Nouveau projet ? Les modifications non sauvegardées seront perdues.')) return;
   owSections = []; owGroups = []; owNuanceInsts = [];
   owNextSecId = 1; owNextGrpId = 1; owNextNuInstId = 1;
-  owActiveGrp = null; owActiveSec = null; owFilePath = null; owModified = false;
+  owActiveGrp = null; owActiveSec = null; owFilePath = null; owSetModified(false);
   interpGrpData = {};
   owTempoBySection = {}; owGainBySection = {}; owNuanceInstsBySection = {};
   owTempoPoints = []; owGainPoints = []; owNbTempo = 1; owNbGain = 1;
@@ -912,7 +985,7 @@ function owParseData(txt, label) {
           renvRetrograde: b(g.getAttribute('renvRetrograde')),
           repetition: b(g.getAttribute('repetition')),
           repetitionMax: n(g.getAttribute('repetitionMax'), 2),
-          transposition: b(g.getAttribute('transposition')),
+          transposition: g.getAttribute('transposition') === 'false' ? false : true,
           augDim: b(g.getAttribute('augDim')),
           augDimMin: n(g.getAttribute('augDimMin'), -2),
           augDimMax: n(g.getAttribute('augDimMax'),  2),
@@ -1021,7 +1094,7 @@ function owParseData(txt, label) {
     owNextSecId = secId;
     owNextGrpId = grpId;
     owActiveGrp = null;
-    owModified  = false;
+    owSetModified(false);
     owActiveSec = owSections.length ? owSections[0].id : null;
     owLoadSectionCurves(owActiveSec);
     owCloseAllPopups();
@@ -1117,7 +1190,7 @@ function owTelecharger(nom, contenu) {
   a.download = nom.endsWith('.xml') ? nom : nom + '.xml';
   a.click();
   URL.revokeObjectURL(url);
-  owModified = false;
+  owSetModified(false);
 }
 
 function owExporterInterpretor() {
@@ -1163,7 +1236,7 @@ function owAjouterSection() {
     owLoadSectionCurves(newId);
     owRebuildTempoPoints();
   }
-  owModified = true;
+  owSetModified(true);
   owRenderAll();
 }
 
@@ -1188,7 +1261,7 @@ function owSupprimerSection() {
     owLoadSectionCurves(owActiveSec);
     owRebuildTempoPoints();
   }
-  owModified = true;
+  owSetModified(true);
   owRenderAll();
 }
 
@@ -1222,7 +1295,7 @@ function owDoPermuter() {
   s1.posY = s2.posY;
   s2.posY = tmp;
   document.getElementById('permutPopup').style.display = 'none';
-  owModified = true;
+  owSetModified(true);
   owRenderAll();
 }
 
@@ -1240,11 +1313,11 @@ function owAjouterGroupe() {
     sectionId: sec.id,
     posX: 20, posY: sec.posY + 20,
     w: 120, h: 60,
-    color: '#c8dcff', opacity: 0.5, nuance: ''
+    color: '#c8dcff', opacity: 0.5, nuance: '', transposition: true
   };
   owGroups.push(grp);
   owActiveGrp = grp.id;
-  owModified  = true;
+  owSetModified(true);
   owRenderAll();
   owUpdateInfo();
 }
@@ -1257,7 +1330,7 @@ function owSupprimerGroupe() {
   if (!confirm('Supprimer le groupe « ' + grp.name + ' » ?')) return;
   owGroups    = owGroups.filter(g => g.id !== owActiveGrp);
   owActiveGrp = null;
-  owModified  = true;
+  owSetModified(true);
   owRenderAll();
   owUpdateInfo();
 }
@@ -1272,6 +1345,10 @@ function owParamsGroupe() {
   document.getElementById('gpH').value        = grp.h;
   document.getElementById('gpColor').value    = grp.color;
   document.getElementById('gpOpacity').value  = grp.opacity;
+  const transp = grp.transposition !== false;
+  const btnT = document.getElementById('gpTransposition');
+  btnT.textContent = transp ? 'Oui' : 'Non';
+  btnT.style.background = transp ? '#b8e4b8' : '#f0c0c0';
   // Reconstruire le select nuances
   const sel = document.getElementById('gpNuance');
   sel.innerHTML = '<option value="">—</option>';
@@ -1296,8 +1373,15 @@ function owUpdateGrp(param) {
     case 'color':   grp.color   = document.getElementById('gpColor').value; break;
     case 'opacity': grp.opacity = parseFloat(document.getElementById('gpOpacity').value)||0.5; break;
     case 'nuance':  grp.nuance  = document.getElementById('gpNuance').value; break;
+    case 'transposition': {
+      grp.transposition = !grp.transposition;
+      const btn = document.getElementById('gpTransposition');
+      btn.textContent = grp.transposition ? 'Oui' : 'Non';
+      btn.style.background = grp.transposition ? '#b8e4b8' : '#f0c0c0';
+      break;
+    }
   }
-  owModified = true;
+  owSetModified(true);
   const el = document.getElementById('grp' + grp.id);
   if (el) owApplyGrpStyle(el, grp);
 }
@@ -1373,6 +1457,40 @@ function owShowPrefTab(tab) {
   document.querySelectorAll('.pref-tab').forEach(t => t.classList.remove('actif'));
   document.getElementById('prefPane' + tab.charAt(0).toUpperCase() + tab.slice(1)).classList.add('actif');
   document.querySelector('.pref-tab[onclick*="' + tab + '"]').classList.add('actif');
+}
+
+// ── Son : sélection de la sortie audio (via audio_server.py WebSocket) ─────────
+let owSonDeviceIndex = null;
+
+function owAudioHandleDevices(list) {
+  const sel    = document.getElementById('owSonDevice');
+  const status = document.getElementById('owSonStatus');
+  if (!sel) return;
+  let opts = '<option value="">— JACK auto —</option>';
+  for (const d of list) {
+    const label = '[' + d.index + '] ' + d.name + ' (' + d.max_output_channels + 'ch, ' + d.hostapi + ')';
+    const sel2  = (d.index === owSonDeviceIndex) ? ' selected' : '';
+    opts += '<option value="' + d.index + '"' + sel2 + '>' + label + '</option>';
+  }
+  sel.innerHTML = opts;
+  if (status) status.textContent = list.length + ' périphérique(s) disponible(s)';
+}
+
+function owSonRemplirUI() {
+  const status = document.getElementById('owSonStatus');
+  if (!owAudioWsReady) {
+    if (status) status.textContent = 'Serveur audio non connecté — démarrage en cours…';
+    return;
+  }
+  owAudioSend({ cmd: 'list_devices' });
+  if (status) status.textContent = 'Chargement…';
+}
+
+function owSonSetDevice(val) {
+  const status = document.getElementById('owSonStatus');
+  owSonDeviceIndex = val ? parseInt(val) : null;
+  owAudioSend({ cmd: 'set_device', device: owSonDeviceIndex });
+  if (status) status.textContent = 'Changement en cours…';
 }
 
 // ── Spatialisation ──────────────────────────────
@@ -1506,7 +1624,7 @@ function owApplyNuance(nom) {
   /* Rafraîchir */
   if (document.getElementById('grpInfoPopup').style.display !== 'none') owShowGrpInfo(grp);
   owBuildNuancePalette();
-  owModified = true;
+  owSetModified(true);
 }
 
 /* ── Crée le SVG inline d'un glyphe de nuance ── */
@@ -1544,7 +1662,7 @@ function owMakeNuanceInstEl(inst) {
       owDrawGain();
     }
     div.remove();
-    owModified = true;
+    owSetModified(true);
   });
   space.appendChild(div);
 }
@@ -1575,7 +1693,7 @@ function owDragNuanceInst(el, inst, startEvt) {
   document.onmouseup = function() {
     document.onmousemove = null;
     document.onmouseup   = null;
-    if (dragged) owModified = true;
+    if (dragged) owSetModified(true);
   };
 }
 
@@ -1602,7 +1720,7 @@ function owBuildNuancesTable() {
 function owNuanceVal(inp) {
   owNuances[parseInt(inp.dataset.idx)].val = parseInt(inp.value) || 0;
   owBuildNuancePalette();
-  owModified = true;
+  owSetModified(true);
 }
 
 function owAjouterNuance() {
@@ -1610,7 +1728,7 @@ function owAjouterNuance() {
   if (!nom) return;
   owNuances.push({nom, val: 60});
   owBuildNuancesTable();
-  owModified = true;
+  owSetModified(true);
 }
 
 function owSupprimerNuance() {
@@ -1619,7 +1737,7 @@ function owSupprimerNuance() {
   if (!confirm('Supprimer « ' + last.nom + ' » ?')) return;
   owNuances.pop();
   owBuildNuancesTable();
-  owModified = true;
+  owSetModified(true);
 }
 
 // ═══════════════════════════════════════════════
@@ -1817,12 +1935,13 @@ function owGrpPlayValidate() {
   }
 
   grp.dir = dirVal;
-  owModified = true;
+  owSetModified(true);
   const div = document.getElementById('grp' + grp.id);
   if (div) {
     owApplyGrpStyle(div, grp);
     owComputeGrpObjets(grp);
     owDrawTransformOverlay(grp, div);
+    if (grp.transposition) owMiseANiveauAudio(grp).catch(e => console.error('[Audio]', e));
   }
 }
 
@@ -1890,7 +2009,7 @@ function owGrpCopier(grp) {
   interpGrpData[newGrp.id] = { xml: newXml, imgBase: data.imgBase };
   owGroups.push(newGrp);
   owActiveGrp = newGrp.id;
-  owModified = true;
+  owSetModified(true);
   owRenderGroups();
   owUpdateInfo();
 }
@@ -1992,6 +2111,125 @@ function owComputeGrpObjets(grp) {
   return objs;
 }
 
+// ─── Décodeur WAV manuel (fallback à decodeAudioData) ───────────────────────
+function owDecodeWavManual(ab, audioCtx) {
+  const v = new DataView(ab);
+  const rs = (off, n) => Array.from({length:n}, (_,i) => String.fromCharCode(v.getUint8(off+i))).join('');
+  if (rs(0,4) !== 'RIFF' || rs(8,4) !== 'WAVE') throw new Error('Not WAV');
+  let off = 12, fmt = null, dataOff = 0, dataSize = 0;
+  while (off < ab.byteLength - 8) {
+    const id = rs(off, 4);
+    const sz = v.getUint32(off + 4, true);
+    off += 8;
+    if (id === 'fmt ') {
+      fmt = { af: v.getUint16(off,true), ch: v.getUint16(off+2,true),
+               sr: v.getUint32(off+4,true), bps: v.getUint16(off+14,true) };
+    } else if (id === 'data') { dataOff = off; dataSize = sz; }
+    off += sz + (sz % 2);
+    if (fmt && dataOff) break;
+  }
+  if (!fmt || !dataOff) throw new Error('WAV invalide');
+  const { af, ch, sr, bps } = fmt;
+  const frames = Math.floor(dataSize / (ch * bps / 8));
+  const localCtx = !audioCtx ? new AudioContext() : null;
+  const usedCtx  = audioCtx || localCtx;
+  const buf = usedCtx.createBuffer(ch, frames, sr);
+  if (localCtx) localCtx.close();
+  for (let c = 0; c < ch; c++) {
+    const d = buf.getChannelData(c);
+    const stride = ch * bps / 8;
+    for (let i = 0; i < frames; i++) {
+      const o = dataOff + i * stride + c * bps / 8;
+      if      (bps === 8)               d[i] = (v.getUint8(o) - 128) / 128;
+      else if (bps === 16)              d[i] = v.getInt16(o, true) / 32768;
+      else if (bps === 24) { const lo=v.getUint8(o), mi=v.getUint8(o+1), hi=v.getInt8(o+2); d[i]=((hi<<16)|(mi<<8)|lo)/8388608; }
+      else if (bps === 32 && af === 3)  d[i] = v.getFloat32(o, true);
+      else if (bps === 32)              d[i] = v.getInt32(o, true) / 2147483648;
+    }
+  }
+  return buf;
+}
+
+// ─── Encodage WAV 16 bits PCM ────────────────────────────────────────────────
+function owAudioBufferToWav(buf) {
+  const ch = buf.numberOfChannels, sr = buf.sampleRate, len = buf.length;
+  const ab = new ArrayBuffer(44 + len * ch * 2);
+  const v  = new DataView(ab);
+  const w  = (off, val, n) => { for (let i=0;i<n;i++) v.setUint8(off+i,(val>>(i*8))&0xff); };
+  const ws = (off, s)      => { for (let i=0;i<s.length;i++) v.setUint8(off+i,s.charCodeAt(i)); };
+  ws(0,'RIFF'); w(4,ab.byteLength-8,4); ws(8,'WAVE'); ws(12,'fmt ');
+  w(16,16,4); w(20,1,2); w(22,ch,2); w(24,sr,4); w(28,sr*ch*2,4); w(32,ch*2,2); w(34,16,2);
+  ws(36,'data'); w(40,len*ch*2,4);
+  let off=44;
+  for (let i=0;i<len;i++) for (let c=0;c<ch;c++) {
+    const s=Math.max(-1,Math.min(1,buf.getChannelData(c)[i]));
+    v.setInt16(off,Math.round(s<0?s*32768:s*32767),true); off+=2;
+  }
+  return ab;
+}
+
+// ─── Mise à niveau audio : transposition selon le nouveau posY ───────────────
+async function owMiseANiveauAudio(grp) {
+  if (!grp.transposition) return;
+  if (!owFilePath || !window.api?.readAudioFile) return;
+  const parsed = owParseGrpXml(grp.id);
+  if (!parsed) return;
+  const origObjs = parsed.audio;
+  const newObjs  = grp.owTableObjets;
+  if (!newObjs?.length) return;
+
+  const SPACE_H = 3000;
+  const status  = document.getElementById('spFaustStatus');
+  if (status) status.textContent = 'Traitement audio…';
+
+  let count = 0;
+  for (const newObj of newObjs) {
+    const origObj = origObjs.find(o => o.id === newObj.id);
+    if (!origObj) continue;
+    if (origObj.flagTranspo === 0) continue;
+
+    const filename = origObj.id + '-fx.wav';
+    const origRef = owPitchRef(origObj);
+    const newRef  = owPitchRef(newObj);
+    const origFactor = (SPACE_H - origRef) / (SPACE_H / 2);
+    const newFactor  = (SPACE_H - newRef)  / (SPACE_H / 2);
+    if (origFactor <= 0 || newFactor <= 0) continue;
+    const relativeFactor = newFactor / origFactor;
+    if (Math.abs(relativeFactor - 1) < 0.001) continue;
+
+    const raw = await window.api.readAudioFile(owFilePath, filename);
+    if (!raw) { console.warn('[Audio] fichier introuvable :', origObj.file); continue; }
+
+    const rawAb = new Uint8Array(raw).buffer;
+    let audioBuf;
+    try {
+      const tmpCtx = new AudioContext();
+      audioBuf = await tmpCtx.decodeAudioData(rawAb.slice(0));
+      await tmpCtx.close();
+    } catch(e) {
+      console.warn('[Audio] decodeAudioData échoué, fallback WAV manuel :', filename, e.message);
+      try { audioBuf = owDecodeWavManual(rawAb); }
+      catch(e2) { console.warn('[Audio] décodage manuel échoué :', filename, e2.message); continue; }
+    }
+
+    const newLen = Math.max(1, Math.round(audioBuf.length / relativeFactor));
+    const offCtx = new OfflineAudioContext(audioBuf.numberOfChannels, newLen, audioBuf.sampleRate);
+    const src = offCtx.createBufferSource();
+    src.buffer = audioBuf;
+    src.playbackRate.value = relativeFactor;
+    src.connect(offCtx.destination);
+    src.start(0);
+    const rendered = await offCtx.startRendering();
+
+    const wavData = owAudioBufferToWav(rendered);
+    await window.api.saveAudioFile(owFilePath, 'interprete', filename, wavData);
+    count++;
+  }
+
+  if (status) status.textContent = `Audio : ${count} fichier(s) transposé(s) → Audios/interprete/`;
+  console.log(`[Audio] ${count} fichier(s) → Audios/interprete/`);
+}
+
 function owDrawTransformOverlay(grp, grpDiv) {
   grpDiv.querySelectorAll('.ow-drawn-obj[data-obj-class="1"]').forEach(e => e.remove());
   grpDiv.querySelectorAll('.ow-tr-marker').forEach(e => e.remove());
@@ -2034,7 +2272,7 @@ function owDrawTransformOverlay(grp, grpDiv) {
     grp.posY = newPosY;
     owApplyGrpStyle(grpDiv, grp);
     grpDiv.style.top = grp.posY + 'px';
-    owModified = true;
+    owSetModified(true);
   }
 
   objs.forEach(o => {
@@ -2106,8 +2344,11 @@ function parseObjetEl(el) {
     x3: vf('x3'),   y3:vf('y3'),
     cp1x:vf('cp1x',25), cp1y:vf('cp1y',30),
     cp2x:vf('cp2x',45), cp2y:vf('cp2y',30),
-    img: v('imag',''),
-    nom: v('nom','')
+    img:        v('imag',''),
+    nom:        v('nom',''),
+    file:       v('file',''),
+    flagTranspo:vi('flagtranspo', 1),
+    basePosY:   vf('baseposy'),
   };
 }
 
@@ -2668,7 +2909,7 @@ function owDragElement(elmnt, grpData, startEvt) {
     if (dragged) {
       owApplyPosConstraints(grpData);
       elmnt.style.left = grpData.posX + 'px';
-      owModified = true;
+      owSetModified(true);
     }
   }
 }
@@ -2689,7 +2930,7 @@ function owResizeElement(elmnt, grpData, startEvt) {
   document.onmouseup = function() {
     document.onmousemove = null;
     document.onmouseup   = null;
-    owModified = true;
+    owSetModified(true);
     const d = interpGrpData[grpData.id];
     if (d) {
       drawObjets(d.xml, elmnt, d.imgBase);
@@ -2765,7 +3006,7 @@ function owCreatePointEl(id, x, y, color, arr, drawFn, titleFn) {
       const i = arr.findIndex(p => p.id === id);
       if (i > -1) arr.splice(i, 1);
       drawFn();
-      owModified = true;
+      owSetModified(true);
       return;
     }
     owDragPoint(el, id, arr, drawFn, titleFn, e);
@@ -2791,7 +3032,7 @@ function owDragPoint(el, id, arr, drawFn, titleFn, startEvt) {
   document.onmouseup = function() {
     document.onmousemove = null;
     document.onmouseup   = null;
-    owModified = true;
+    owSetModified(true);
   };
 }
 
@@ -2801,7 +3042,7 @@ function owInsertTempoPoint(x, y) {
   owTempoPoints.sort((a, b) => a.X - b.X);
   owCreatePointEl(id, x, y, 'green', owTempoPoints, owDrawTempo, owTempoPointTitle);
   owDrawTempo();
-  owModified = true;
+  owSetModified(true);
 }
 function owInsertGainPoint(x, y) {
   const id = 'owgna' + owNbGain++;
@@ -2809,7 +3050,7 @@ function owInsertGainPoint(x, y) {
   owGainPoints.sort((a, b) => a.X - b.X);
   owCreatePointEl(id, x, y, '#c33', owGainPoints, owDrawGain, owGainPointTitle);
   owDrawGain();
-  owModified = true;
+  owSetModified(true);
   return id;
 }
 
@@ -2897,7 +3138,7 @@ if (typeof window.api !== 'undefined') {
     switch (cmd) {
       case 'owSaved':
         owFilePath = rest;
-        owModified = false;
+        owSetModified(false);
         document.getElementById('owFileLabel').textContent = rest.split(/[\\/]/).at(-1);
         break;
       case 'owLoaded': {
@@ -2924,6 +3165,12 @@ if (typeof window.api !== 'undefined') {
         drawObjets(grpXml, grpDiv, imgBase);
         break;
       }
+      case 'audioServerReady':
+        owAudioWsPort = parseInt(rest) || 9876;
+        if (_owAudioReconnect) { clearTimeout(_owAudioReconnect); _owAudioReconnect = null; }
+        if (owAudioWs) { try { owAudioWs.close(); } catch(e) {} owAudioWs = null; owAudioWsReady = false; }
+        owAudioConnect();
+        break;
     }
   });
 }
@@ -2989,16 +3236,176 @@ function owResetBarVert() {
   owBarVertTime = 0;
 }
 
-// Contexte audio – taux d'échantillonnage
-(function() {
+// ═══════════════════════════════════════════════
+//  TRANSPORT
+// ═══════════════════════════════════════════════
+
+function owMoveBarTo(px) {
+  const x = Math.max(0, px);
+  const bar = document.getElementById('owBarVerticale');
+  bar.style.left = x + 'px';
+  owBarVertTime  = x / (OW_BASE_PX * owZoomScale);
+  owSetCompteur(x);
+}
+
+function owRescheduleAudio() {
+  if (owPlayTimer) owStartAudio().catch(e => console.error('[Lecture audio]', e));
+}
+
+function playerDebut() {
+  owMoveBarTo(0);
+  owRescheduleAudio();
+}
+
+function playerEnd() {
+  if (owActiveSec === null) { owMoveBarTo(0); owRescheduleAudio(); return; }
+  const grps = owGroups.filter(g => g.sectionId === owActiveSec);
+  if (!grps.length) { owMoveBarTo(0); owRescheduleAudio(); return; }
+  const maxX = Math.max(...grps.map(g => ((g.posX || 0) + (g.w || 0)) * owZoomScale));
+  owMoveBarTo(maxX);
+  owRescheduleAudio();
+}
+
+function playerPrec() {
+  if (owActiveSec === null) return;
+  const curPx = parseFloat(document.getElementById('owBarVerticale').style.left) || 0;
+  const positions = owGroups
+    .filter(g => g.sectionId === owActiveSec)
+    .map(g => (g.posX || 0) * owZoomScale)
+    .filter(x => x < curPx - 2)
+    .sort((a, b) => b - a);
+  owMoveBarTo(positions.length ? positions[0] : 0);
+  owRescheduleAudio();
+}
+
+function playerSuiv() {
+  if (owActiveSec === null) return;
+  const curPx = parseFloat(document.getElementById('owBarVerticale').style.left) || 0;
+  const positions = owGroups
+    .filter(g => g.sectionId === owActiveSec)
+    .map(g => (g.posX || 0) * owZoomScale)
+    .filter(x => x > curPx + 2)
+    .sort((a, b) => a - b);
+  if (positions.length) owMoveBarTo(positions[0]);
+  owRescheduleAudio();
+}
+
+// ─── WebSocket vers audio_server.py ──────────────────────────────────────────
+let owAudioWs         = null;
+let owAudioWsReady    = false;
+let owAudioWsPort     = null;   // port communiqué par main.js via audioServerReady
+let _owAudioReconnect = null;
+
+function owAudioConnect() {
+  if (!owAudioWsPort) return;
+  if (_owAudioReconnect) { clearTimeout(_owAudioReconnect); _owAudioReconnect = null; }
+  if (owAudioWs && owAudioWs.readyState <= 1) return;
   try {
-    const ctx = new AudioContext();
-    document.getElementById('owRate').textContent = ctx.sampleRate;
-    ctx.close();
-  } catch(e) {
-    document.getElementById('owRate').textContent = '48000';
+    owAudioWs = new WebSocket('ws://127.0.0.1:' + owAudioWsPort);
+    owAudioWs.onopen = () => {
+      owAudioWsReady = true;
+      console.log('[AudioWS] Connecté sur port', owAudioWsPort);
+      if (owSonDeviceIndex !== null)
+        owAudioSend({ cmd: 'set_device', device: owSonDeviceIndex });
+    };
+    owAudioWs.onclose = () => {
+      owAudioWsReady = false;
+      if (owAudioWsPort) _owAudioReconnect = setTimeout(owAudioConnect, 2000);
+    };
+    owAudioWs.onerror = () => {};
+    owAudioWs.onmessage = evt => {
+      try {
+        const msg = JSON.parse(evt.data);
+        if (msg.type === 'devices')    owAudioHandleDevices(msg.list);
+        if (msg.type === 'device_set') {
+          if (msg.changed) owSonDeviceIndex = msg.device;
+          const el = document.getElementById('owSonStatus');
+          if (el) el.textContent = msg.changed ? ('Device ' + msg.device + ' actif') : 'Inchangé';
+        }
+      } catch(e) {}
+    };
+  } catch(e) { console.warn('[AudioWS] Erreur:', e.message); }
+}
+
+function owAudioSend(obj) {
+  if (owAudioWs && owAudioWs.readyState === 1)
+    owAudioWs.send(JSON.stringify(obj));
+}
+
+function owStopAudio() {
+  owAudioSend({ cmd: 'stop' });
+}
+
+async function owStartAudio() {
+  if (!owFilePath) return;
+  if (owActiveSec === null) return;
+
+  owStopAudio();
+
+  const barTime = owBarVertTime;
+  const t0 = Date.now();
+  let count = 0;
+
+  const grps = owGroups.filter(g => g.sectionId === owActiveSec && g.owTableObjets?.length);
+
+  for (const grp of grps) {
+    const parsed = owParseGrpXml(grp.id);
+    if (!parsed) continue;
+    const { ctn } = parsed;
+    const sx0 = (grp._baseW !== undefined ? grp._baseW : grp.w) / ctn.ctnW;
+
+    for (const obj of grp.owTableObjets) {
+      const objPx   = grp.posX + (obj.posX - ctn.ctnX) * sx0;
+      const objTime = objPx / OW_BASE_PX;
+      const delay   = objTime - barTime;
+      if (delay < -0.05) continue;
+
+      const filename = obj.id + '-fx.wav';
+      const absPath  = await window.api?.resolveAudioPath?.(owFilePath, filename);
+      if (!absPath) continue;
+
+      const waitMs = Math.max(0, Math.round(delay * 1000) - (Date.now() - t0));
+      const vid    = String(obj.id);
+      const fp     = absPath;
+      setTimeout(() => owAudioSend({ cmd: 'play', id: vid, file: fp, notify_end: false }), waitMs);
+      count++;
+    }
   }
-})();
+  console.log('[Lecture] ' + count + ' fichier(s) → audio_server');
+}
+
+let owPlayTimer = null;
+function readPart() {
+  const btn = document.getElementById('play3');
+  if (owPlayTimer) {
+    clearInterval(owPlayTimer);
+    owPlayTimer = null;
+    btn.classList.remove('playing');
+    owStopAudio();
+    return;
+  }
+  btn.classList.add('playing');
+  owStartAudio().catch(e => console.error('[Lecture audio]', e));
+  const frameMs = 50;
+  owPlayTimer = setInterval(() => {
+    const bar = document.getElementById('owBarVerticale');
+    const cur = parseFloat(bar.style.left) || 0;
+    owMoveBarTo(cur + OW_BASE_PX * owZoomScale * frameMs / 1000);
+  }, frameMs);
+}
+
+function owRefreshAll() {
+  if (owActiveSec === null) return;
+  owGroups.filter(g => g.sectionId === owActiveSec).forEach(grp => {
+    const div = document.getElementById('grp' + grp.id);
+    if (!div) return;
+    const d = interpGrpData[grp.id];
+    if (d) drawObjets(d.xml, div, d.imgBase);
+    if (grp.owTableObjets?.length) owDrawTransformOverlay(grp, div);
+  });
+}
+
+// La connexion WebSocket démarre quand main.js envoie audioServerReady;PORT
 
 // ═══════════════════════════════════════════════
 //  RÉGLETTES + ZOOM

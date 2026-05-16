@@ -10,4 +10,14 @@ contextBridge.exposeInMainWorld('api', {
   listLayouts:    ()     => ipcRenderer.invoke('spatListLayouts'),
   readLayoutJSON: (name) => ipcRenderer.invoke('spatReadLayout', name),
   getSpatPaths:   ()     => ipcRenderer.invoke('spatGetPaths'),
+
+  // Audios
+  readAudioFile:  (partitionPath, filename)              => ipcRenderer.invoke('audiosReadFile', partitionPath, filename),
+  saveAudioFile:  (partitionPath, subfolder, filename, data) => ipcRenderer.invoke('audiosSaveFile', partitionPath, subfolder, filename, data),
+
+  // NSM – signaler dirty/clean au gestionnaire de session
+  nsmDirty: (dirty) => ipcRenderer.send('nsmDirty', dirty),
+
+  // Résolution du chemin absolu d'un fichier audio (pour audio_server.py)
+  resolveAudioPath: (partitionPath, filename) => ipcRenderer.invoke('resolveAudioPath', partitionPath, filename),
 });

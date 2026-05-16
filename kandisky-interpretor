@@ -1,0 +1,5 @@
+#!/bin/bash
+# Lanceur NSM pour kandisky-interpretor
+# À placer dans ~/.local/bin/ ou /usr/local/bin/ (chmod +x)
+cd "$(dirname "$(readlink -f "$0")")"
+exec npm start
