@@ -3380,17 +3380,21 @@ async function owStartAudio() {
   console.log('[Lecture] ' + count + ' fichier(s) → audio_server');
 }
 
+const _SVG_PLAY  = 'M0,40 0,5 30,20 0,35';
+const _SVG_PAUSE = 'M5,40 L5,0 M25,0 L25,40';
+
 let owPlayTimer = null;
 function readPart() {
-  const btn = document.getElementById('play3');
+  const btn  = document.getElementById('play3');
+  const path = btn.querySelector('path');
   if (owPlayTimer) {
     clearInterval(owPlayTimer);
     owPlayTimer = null;
-    btn.classList.remove('playing');
+    if (path) path.setAttribute('d', _SVG_PLAY);
     owStopAudio();
     return;
   }
-  btn.classList.add('playing');
+  if (path) path.setAttribute('d', _SVG_PAUSE);
   owStartAudio().catch(e => console.error('[Lecture audio]', e));
   const frameMs = 50;
   owPlayTimer = setInterval(() => {
