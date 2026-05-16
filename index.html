@@ -1736,7 +1736,6 @@ function owComputeGrpObjets(grp) {
 }
 
 function owDrawTransformOverlay(grp, grpDiv) {
-  // Supprimer les anciens objets audio et marqueurs
   grpDiv.querySelectorAll('.ow-drawn-obj[data-obj-class="1"]').forEach(e => e.remove());
   grpDiv.querySelectorAll('.ow-tr-marker').forEach(e => e.remove());
 
@@ -1748,19 +1747,31 @@ function owDrawTransformOverlay(grp, grpDiv) {
   const {ctn} = parsed;
   const imgBase = interpGrpData[grp.id]?.imgBase || '';
 
-  // Adapter la hauteur du cadre si les objets transformés débordent vers le bas
+  // Échelle d'origine (avant tout redimensionnement)
+  const sx0 = grp.w / ctn.ctnW;
+  const sy0 = grp.h / ctn.ctnH;
+
+  // Bornes effectives du contenu transformé
+  const minObjY = Math.min(...objs.map(o => o.posY));
   const maxObjY = Math.max(...objs.map(o => o.posY + (o.bkgHeight || 0)));
-  const overflow = maxObjY - (ctn.ctnY + ctn.ctnH);
-  if (overflow > 0) {
-    grp.h = Math.round(grp.h + overflow * (grp.h / ctn.ctnH));
+  const maxObjX = Math.max(...objs.map(o => o.posX + (o.bkgWidth  || 0)));
+
+  const effCtnY = Math.min(ctn.ctnY, minObjY);
+  const effCtnH = Math.max(ctn.ctnY + ctn.ctnH, maxObjY) - effCtnY;
+  const effCtnW = Math.max(ctn.ctnX + ctn.ctnW, maxObjX) - ctn.ctnX;
+
+  const newH    = Math.round(effCtnH * sy0);
+  const newW    = Math.round(effCtnW * sx0);
+  const newPosY = Math.round(grp.posY - (ctn.ctnY - effCtnY) * sy0);
+
+  if (newH !== grp.h || newW !== grp.w || newPosY !== grp.posY) {
+    grp.h    = newH;
+    grp.w    = newW;
+    grp.posY = newPosY;
     owApplyGrpStyle(grpDiv, grp);
+    grpDiv.style.top = grp.posY + 'px';
     owModified = true;
   }
-
-  const divW = parseFloat(grpDiv.style.width)  || grp.w;
-  const divH = parseFloat(grpDiv.style.height) || grp.h;
-  const sx   = divW / ctn.ctnW;
-  const sy   = divH / ctn.ctnH;
 
   objs.forEach(o => {
     const shape = buildObjSvg(o, imgBase);
@@ -1770,10 +1781,10 @@ function owDrawTransformOverlay(grp, grpDiv) {
       const op = Math.round(o.bkgOpacity * 255).toString(16).padStart(2, '0');
       bkg = `<rect x="0" y="0" width="${o.bkgWidth}" height="${o.bkgHeight}" fill="${o.bkgColor}${op}"/>`;
     }
-    const rx = (o.posX - ctn.ctnX) * sx;
-    const ry = (o.posY - ctn.ctnY) * sy;
-    const w  = Math.max(1, o.bkgWidth  * sx);
-    const h  = Math.max(1, o.bkgHeight * sy);
+    const rx = (o.posX - ctn.ctnX)  * sx0;
+    const ry = (o.posY - effCtnY)   * sy0;
+    const w  = Math.max(1, o.bkgWidth  * sx0);
+    const h  = Math.max(1, o.bkgHeight * sy0);
     const d  = document.createElement('div');
     d.className = 'ow-drawn-obj';
     d.dataset.objClass = '1';
