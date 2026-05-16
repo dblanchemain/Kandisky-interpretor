@@ -108,10 +108,7 @@
     }
     #secondaire {
       top: 26px !important;
-      left: 200px !important;
-      width: calc(100vw - 200px) !important;
       height: calc(100vh - 26px) !important;
-      overflow: hidden !important;
     }
 
     /* ── Réglette ── */
@@ -560,8 +557,7 @@
     <span style="margin-left:40px;">Contexte</span> : <span id="owRate" style="margin-left:6px;">48000</span>
   </div>
 
-  <div id="owWorkScroll" style="position:absolute;top:38px;left:0;right:0;bottom:0;overflow-x:scroll;overflow-y:hidden;">
-  <div id="work" style="position:relative;top:0;left:0;width:12960px;height:788px;overflow-x:hidden;overflow-y:hidden;border:0;">
+  <div id="work" style="position:absolute;top:38px;left:0;width:12960px;height:788px;overflow-x:scroll;overflow-y:hidden;border:0;">
     <!-- Réglette temporelle + mesures -->
     <div id="owRegle" style="position:absolute;top:0;left:0;width:12960px;height:50px;">
       <svg id="owReglette" width="12960" height="50"
@@ -600,7 +596,6 @@
       <div style="position:absolute;top:14px;left:6px;width:2px;height:774px;background:#e05;opacity:0.75;"></div>
     </div>
   </div>
-  </div><!-- #owWorkScroll -->
 </div>
 
 <!-- Input fichier caché pour ouverture -->
@@ -3287,8 +3282,8 @@ let owBarVertTime = 0;
 function owResetBarVert() {
   document.getElementById('owBarVerticale').style.left = '0px';
   owBarVertTime = 0;
-  const sc = document.getElementById('owWorkScroll');
-  if (sc) sc.scrollLeft = 0;
+  const work = document.getElementById('work');
+  if (work) work.scrollLeft = 0;
 }
 
 // ═══════════════════════════════════════════════
@@ -3301,12 +3296,12 @@ function owMoveBarTo(px) {
   bar.style.left = x + 'px';
   owBarVertTime  = x / (OW_BASE_PX * owZoomScale);
   owSetCompteur(x);
-  const sc = document.getElementById('owWorkScroll');
-  if (sc) {
-    const vis = sc.clientWidth;
-    const sl  = sc.scrollLeft;
-    if (x > sl + vis - 40)  sc.scrollLeft = Math.max(0, x - Math.round(vis * 0.2));
-    else if (x < sl + 10)   sc.scrollLeft = Math.max(0, x - Math.round(vis * 0.2));
+  const work = document.getElementById('work');
+  if (work) {
+    const vis = work.clientWidth;
+    const sl  = work.scrollLeft;
+    if (x > sl + vis - 40)  work.scrollLeft = Math.max(0, x - Math.round(vis * 0.2));
+    else if (x < sl + 10)   work.scrollLeft = Math.max(0, x - Math.round(vis * 0.2));
   }
 }
 
@@ -3491,6 +3486,20 @@ function owRefreshAll() {
 // La connexion WebSocket démarre quand main.js envoie audioServerReady;PORT
 
 // ═══════════════════════════════════════════════
+//  WORKSPACE : adapte #work à la fenêtre visible
+// ═══════════════════════════════════════════════
+function owUpdateWorkspace() {
+  const w    = window.innerWidth  - 200;   // 200 = panneau gauche
+  const h    = window.innerHeight - 26 - 38; // menuBar + paramGlobal
+  const work  = document.getElementById('work');
+  const work2 = document.getElementById('work2');
+  if (work)  { work.style.width  = w + 'px'; work.style.height  = (h + 30) + 'px'; }
+  if (work2) {                                work2.style.height =  h       + 'px'; }
+}
+owUpdateWorkspace();
+window.addEventListener('resize', owUpdateWorkspace);
+
+// ═══════════════════════════════════════════════
 //  RÉGLETTES + ZOOM
 // ═══════════════════════════════════════════════
 const OW_SVG = 'http://www.w3.org/2000/svg';
@@ -3653,9 +3662,7 @@ const owWork = document.getElementById('work');
 
 function owMousePosToTime(e) {
   // Position X dans le repère scroll (viewport scroll px)
-  const sc    = document.getElementById('owWorkScroll');
-  const secX  = document.getElementById('secondaire').getBoundingClientRect().left;
-  const posX  = (sc ? sc.scrollLeft : 0) + e.clientX - secX;
+  const posX = owWork.scrollLeft + e.clientX - 200;
   owSetCompteur(Math.max(0, posX));
 }
 
