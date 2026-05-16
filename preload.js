@@ -18,7 +18,6 @@ contextBridge.exposeInMainWorld('api', {
   // NSM – signaler dirty/clean au gestionnaire de session
   nsmDirty: (dirty) => ipcRenderer.send('nsmDirty', dirty),
 
-  // Lecture audio via SoX/play (client JACK)
-  playScheduledFiles: (partitionPath, schedule) => ipcRenderer.invoke('playScheduledFiles', partitionPath, schedule),
-  stopPlay:           ()                         => ipcRenderer.invoke('stopPlay'),
+  // Résolution du chemin absolu d'un fichier audio (pour audio_server.py)
+  resolveAudioPath: (partitionPath, filename) => ipcRenderer.invoke('resolveAudioPath', partitionPath, filename),
 });

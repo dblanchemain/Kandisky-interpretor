@@ -200,38 +200,57 @@ ipcMain.handle('audiosSaveFile', (_, partitionPath, subfolder, filename, data) =
   } catch(e) { console.error('audiosSaveFile:', e); return false; }
 });
 
-// ── Lecture audio via SoX/play → client JACK visible dans Ray Session ─────────
-let kiPlayProcesses = new Set();
+// ── Serveur audio Python (audio_server.py) ────────────────────────────────────
+let audioServerProc = null;
 
-function killKiPlay() {
-  kiPlayProcesses.forEach(p => { try { p.kill('SIGTERM'); } catch(e) {} });
-  kiPlayProcesses.clear();
+function spawnAudioServer() {
+  const pyScript = path.join(__dirname, 'audio_server.py');
+  if (!fs.existsSync(pyScript)) {
+    console.warn('[AudioServer] audio_server.py introuvable');
+    return;
+  }
+  audioServerProc = spawn('python3', [pyScript], {
+    env: { ...process.env },
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+  let buf = '';
+  audioServerProc.stdout.on('data', chunk => {
+    buf += chunk.toString();
+    let nl;
+    while ((nl = buf.indexOf('\n')) !== -1) {
+      const line = buf.slice(0, nl).trim();
+      buf = buf.slice(nl + 1);
+      if (line === 'AUDIO_SERVER_READY') {
+        console.log('[AudioServer] Prêt');
+        win?.webContents.send('fromMain', 'audioServerReady');
+      } else if (line) {
+        process.stdout.write('[AudioServer] ' + line + '\n');
+      }
+    }
+  });
+  audioServerProc.stderr.on('data', d => process.stderr.write('[AudioServer] ' + d.toString()));
+  audioServerProc.on('exit', (code, sig) => {
+    console.log('[AudioServer] Terminé (code=' + code + ', signal=' + sig + ')');
+    audioServerProc = null;
+  });
 }
 
-ipcMain.handle('playScheduledFiles', (_, partitionPath, schedule) => {
-  killKiPlay();
-  if (!partitionPath || !schedule?.length) return false;
+// ── Résolution du chemin absolu d'un fichier audio ────────────────────────────
+ipcMain.handle('resolveAudioPath', (_, partitionPath, filename) => {
+  if (!partitionPath) return null;
   const audiosDir = path.join(path.dirname(partitionPath), 'Audios');
-  const t0 = Date.now();
-  schedule.forEach(({ filename, delay }) => {
-    let filePath = path.join(audiosDir, 'interprété', filename);
-    if (!fs.existsSync(filePath)) filePath = path.join(audiosDir, filename);
-    if (!fs.existsSync(filePath)) { console.warn('[play] introuvable :', filename); return; }
-    const wait = Math.max(0, Math.round(delay * 1000) - (Date.now() - t0));
-    setTimeout(() => {
-      const p = spawn('play', [filePath], { env: process.env });
-      kiPlayProcesses.add(p);
-      p.on('exit', () => kiPlayProcesses.delete(p));
-      console.log('[play]', path.basename(filePath), 'delai:', delay.toFixed(3) + 's');
-    }, wait);
-  });
-  return true;
+  const p1 = path.join(audiosDir, 'interprété', filename);
+  if (fs.existsSync(p1)) return p1;
+  const p2 = path.join(audiosDir, filename);
+  if (fs.existsSync(p2)) return p2;
+  return null;
 });
 
-ipcMain.handle('stopPlay', () => { killKiPlay(); return true; });
-
-app.whenReady().then(() => { createWindow(); initNSM(); });
-app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+app.whenReady().then(() => { createWindow(); initNSM(); spawnAudioServer(); });
+app.on('window-all-closed', () => {
+  if (audioServerProc) { try { audioServerProc.kill('SIGTERM'); } catch(e) {} audioServerProc = null; }
+  if (process.platform !== 'darwin') app.quit();
+});
 app.on('activate', () => { if (!win) createWindow(); });
 
 ipcMain.on('toMain', (event, args) => {

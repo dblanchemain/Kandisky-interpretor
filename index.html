@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' blob: 'wasm-unsafe-eval'; img-src 'self' file: data:;"/>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' blob: 'wasm-unsafe-eval'; connect-src ws://127.0.0.1:9876; img-src 'self' file: data:;"/>
   <meta http-equiv="content-style-type" content="text/css"/>
   <link rel="stylesheet" type="text/css" media="all" href="score.css" />
   <title>Interpretor</title>
@@ -1459,38 +1459,38 @@ function owShowPrefTab(tab) {
   document.querySelector('.pref-tab[onclick*="' + tab + '"]').classList.add('actif');
 }
 
-// ── Son : sélection de la sortie audio ──────────
-let owSonDeviceId = '';
+// ── Son : sélection de la sortie audio (via audio_server.py WebSocket) ─────────
+let owSonDeviceIndex = null;
 
-async function owSonRemplirUI() {
+function owAudioHandleDevices(list) {
   const sel    = document.getElementById('owSonDevice');
   const status = document.getElementById('owSonStatus');
-  try {
-    await navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => {});
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    const outputs = devices.filter(d => d.kind === 'audiooutput');
-    sel.innerHTML = '<option value="">— défaut système —</option>' +
-      outputs.map(d => `<option value="${d.deviceId}"${d.deviceId===owSonDeviceId?' selected':''}>${d.label||d.deviceId}</option>`).join('');
-    status.textContent = outputs.length + ' périphérique(s) détecté(s)';
-  } catch(e) {
-    status.textContent = 'Impossible de lister les périphériques : ' + e.message;
+  if (!sel) return;
+  let opts = '<option value="">— JACK auto —</option>';
+  for (const d of list) {
+    const label = '[' + d.index + '] ' + d.name + ' (' + d.max_output_channels + 'ch, ' + d.hostapi + ')';
+    const sel2  = (d.index === owSonDeviceIndex) ? ' selected' : '';
+    opts += '<option value="' + d.index + '"' + sel2 + '>' + label + '</option>';
   }
+  sel.innerHTML = opts;
+  if (status) status.textContent = list.length + ' périphérique(s) disponible(s)';
 }
 
-async function owSonSetDevice(deviceId) {
+function owSonRemplirUI() {
   const status = document.getElementById('owSonStatus');
-  owSonDeviceId = deviceId;
-  if (!owAudioCtx) return;
-  try {
-    if (typeof owAudioCtx.setSinkId === 'function') {
-      await owAudioCtx.setSinkId(deviceId || '');
-      status.textContent = deviceId ? 'Sortie : ' + deviceId.slice(0, 20) + '…' : 'Sortie : défaut système';
-    } else {
-      status.textContent = 'setSinkId non supporté sur ce moteur';
-    }
-  } catch(e) {
-    status.textContent = 'Erreur : ' + e.message;
+  if (!owAudioWsReady) {
+    if (status) status.textContent = 'Serveur audio non connecté — démarrage en cours…';
+    return;
   }
+  owAudioSend({ cmd: 'list_devices' });
+  if (status) status.textContent = 'Chargement…';
+}
+
+function owSonSetDevice(val) {
+  const status = document.getElementById('owSonStatus');
+  owSonDeviceIndex = val ? parseInt(val) : null;
+  owAudioSend({ cmd: 'set_device', device: owSonDeviceIndex });
+  if (status) status.textContent = 'Changement en cours…';
 }
 
 // ── Spatialisation ──────────────────────────────
@@ -3165,6 +3165,9 @@ if (typeof window.api !== 'undefined') {
         drawObjets(grpXml, grpDiv, imgBase);
         break;
       }
+      case 'audioServerReady':
+        owAudioConnect();
+        break;
     }
   });
 }
@@ -3284,14 +3287,48 @@ function playerSuiv() {
   owRescheduleAudio();
 }
 
-// ─── Lecture audio : contexte Web Audio créé au démarrage ───────────────────
-let owAudioCtx    = new AudioContext();
-let owPlaySources = [];
+// ─── WebSocket vers audio_server.py ──────────────────────────────────────────
+let owAudioWs         = null;
+let owAudioWsReady    = false;
+let _owAudioReconnect = null;
+
+function owAudioConnect() {
+  if (owAudioWs && owAudioWs.readyState <= 1) return;
+  try {
+    owAudioWs = new WebSocket('ws://127.0.0.1:9876');
+    owAudioWs.onopen = () => {
+      owAudioWsReady = true;
+      console.log('[AudioWS] Connecté');
+      if (_owAudioReconnect) { clearTimeout(_owAudioReconnect); _owAudioReconnect = null; }
+      if (owSonDeviceIndex !== null)
+        owAudioSend({ cmd: 'set_device', device: owSonDeviceIndex });
+    };
+    owAudioWs.onclose = () => {
+      owAudioWsReady = false;
+      _owAudioReconnect = setTimeout(owAudioConnect, 2000);
+    };
+    owAudioWs.onerror = () => {};
+    owAudioWs.onmessage = evt => {
+      try {
+        const msg = JSON.parse(evt.data);
+        if (msg.type === 'devices')    owAudioHandleDevices(msg.list);
+        if (msg.type === 'device_set') {
+          if (msg.changed) owSonDeviceIndex = msg.device;
+          const el = document.getElementById('owSonStatus');
+          if (el) el.textContent = msg.changed ? ('Device ' + msg.device + ' actif') : 'Inchangé';
+        }
+      } catch(e) {}
+    };
+  } catch(e) { console.warn('[AudioWS] Erreur:', e.message); }
+}
+
+function owAudioSend(obj) {
+  if (owAudioWs && owAudioWs.readyState === 1)
+    owAudioWs.send(JSON.stringify(obj));
+}
 
 function owStopAudio() {
-  owPlaySources.forEach(src => { try { src.stop(0); } catch(e) {} });
-  owPlaySources = [];
-  window.api?.stopPlay?.();
+  owAudioSend({ cmd: 'stop' });
 }
 
 async function owStartAudio() {
@@ -3301,7 +3338,8 @@ async function owStartAudio() {
   owStopAudio();
 
   const barTime = owBarVertTime;
-  const schedule = [];
+  const t0 = Date.now();
+  let count = 0;
 
   const grps = owGroups.filter(g => g.sectionId === owActiveSec && g.owTableObjets?.length);
 
@@ -3316,14 +3354,19 @@ async function owStartAudio() {
       const objTime = objPx / OW_BASE_PX;
       const delay   = objTime - barTime;
       if (delay < -0.05) continue;
-      schedule.push({ filename: obj.id + '-fx.wav', delay: Math.max(0, delay) });
+
+      const filename = obj.id + '-fx.wav';
+      const absPath  = await window.api?.resolveAudioPath?.(owFilePath, filename);
+      if (!absPath) continue;
+
+      const waitMs = Math.max(0, Math.round(delay * 1000) - (Date.now() - t0));
+      const vid    = String(obj.id);
+      const fp     = absPath;
+      setTimeout(() => owAudioSend({ cmd: 'play', id: vid, file: fp, notify_end: false }), waitMs);
+      count++;
     }
   }
-
-  if (window.api?.playScheduledFiles) {
-    await window.api.playScheduledFiles(owFilePath, schedule);
-    console.log('[Lecture] ' + schedule.length + ' fichier(s) → SoX/JACK');
-  }
+  console.log('[Lecture] ' + count + ' fichier(s) → audio_server');
 }
 
 let owPlayTimer = null;
@@ -3357,8 +3400,8 @@ function owRefreshAll() {
   });
 }
 
-// Affichage du taux d'échantillonnage depuis le contexte principal
-document.getElementById('owRate').textContent = owAudioCtx.sampleRate;
+// Démarrer la connexion WebSocket vers audio_server.py
+owAudioConnect();
 
 // ═══════════════════════════════════════════════
 //  RÉGLETTES + ZOOM
