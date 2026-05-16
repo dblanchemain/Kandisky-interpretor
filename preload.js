@@ -17,4 +17,8 @@ contextBridge.exposeInMainWorld('api', {
 
   // NSM – signaler dirty/clean au gestionnaire de session
   nsmDirty: (dirty) => ipcRenderer.send('nsmDirty', dirty),
+
+  // Lecture audio via SoX/play (client JACK)
+  playScheduledFiles: (partitionPath, schedule) => ipcRenderer.invoke('playScheduledFiles', partitionPath, schedule),
+  stopPlay:           ()                         => ipcRenderer.invoke('stopPlay'),
 });

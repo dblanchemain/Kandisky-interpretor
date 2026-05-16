@@ -1,7 +1,8 @@
 const { app, BrowserWindow, ipcMain, dialog, protocol } = require('electron');
-const path  = require('path');
-const fs    = require('fs');
-const dgram = require('dgram');
+const path   = require('path');
+const fs     = require('fs');
+const dgram  = require('dgram');
+const { spawn } = require('child_process');
 
 // ══════════════════════════════════════════════════════════
 //  NSM – Non Session Manager protocol (Ray Session, Catia…)
@@ -198,6 +199,36 @@ ipcMain.handle('audiosSaveFile', (_, partitionPath, subfolder, filename, data) =
     return true;
   } catch(e) { console.error('audiosSaveFile:', e); return false; }
 });
+
+// ── Lecture audio via SoX/play → client JACK visible dans Ray Session ─────────
+let kiPlayProcesses = new Set();
+
+function killKiPlay() {
+  kiPlayProcesses.forEach(p => { try { p.kill('SIGTERM'); } catch(e) {} });
+  kiPlayProcesses.clear();
+}
+
+ipcMain.handle('playScheduledFiles', (_, partitionPath, schedule) => {
+  killKiPlay();
+  if (!partitionPath || !schedule?.length) return false;
+  const audiosDir = path.join(path.dirname(partitionPath), 'Audios');
+  const t0 = Date.now();
+  schedule.forEach(({ filename, delay }) => {
+    let filePath = path.join(audiosDir, 'interprété', filename);
+    if (!fs.existsSync(filePath)) filePath = path.join(audiosDir, filename);
+    if (!fs.existsSync(filePath)) { console.warn('[play] introuvable :', filename); return; }
+    const wait = Math.max(0, Math.round(delay * 1000) - (Date.now() - t0));
+    setTimeout(() => {
+      const p = spawn('play', [filePath], { env: process.env });
+      kiPlayProcesses.add(p);
+      p.on('exit', () => kiPlayProcesses.delete(p));
+      console.log('[play]', path.basename(filePath), 'delai:', delay.toFixed(3) + 's');
+    }, wait);
+  });
+  return true;
+});
+
+ipcMain.handle('stopPlay', () => { killKiPlay(); return true; });
 
 app.whenReady().then(() => { createWindow(); initNSM(); });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });

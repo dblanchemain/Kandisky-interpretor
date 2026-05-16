@@ -3291,22 +3291,17 @@ let owPlaySources = [];
 function owStopAudio() {
   owPlaySources.forEach(src => { try { src.stop(0); } catch(e) {} });
   owPlaySources = [];
+  window.api?.stopPlay?.();
 }
 
 async function owStartAudio() {
-  if (!owFilePath || !window.api?.readAudioFile) return;
+  if (!owFilePath) return;
   if (owActiveSec === null) return;
-
-  if (!owAudioCtx || owAudioCtx.state === 'closed') {
-    owAudioCtx = new AudioContext();
-    document.getElementById('owRate').textContent = owAudioCtx.sampleRate;
-  }
-  if (owAudioCtx.state === 'suspended') await owAudioCtx.resume();
 
   owStopAudio();
 
-  const barTime      = owBarVertTime;
-  const scheduleBase = owAudioCtx.currentTime;
+  const barTime = owBarVertTime;
+  const schedule = [];
 
   const grps = owGroups.filter(g => g.sectionId === owActiveSec && g.owTableObjets?.length);
 
@@ -3321,30 +3316,14 @@ async function owStartAudio() {
       const objTime = objPx / OW_BASE_PX;
       const delay   = objTime - barTime;
       if (delay < -0.05) continue;
-
-      const fname = obj.id + '-fx.wav';
-      let raw = await window.api.readAudioFile(owFilePath, 'interprété/' + fname);
-      if (!raw) raw = await window.api.readAudioFile(owFilePath, fname);
-      if (!raw) { console.warn('[Lecture] fichier introuvable :', fname); continue; }
-
-      const rawAb = new Uint8Array(raw).buffer;
-      let buf;
-      try {
-        buf = await owAudioCtx.decodeAudioData(rawAb.slice(0));
-      } catch(e) {
-        try { buf = owDecodeWavManual(rawAb, owAudioCtx); }
-        catch(e2) { console.warn('[Lecture] décodage échoué :', fname, e2.message); continue; }
-      }
-
-      const src = owAudioCtx.createBufferSource();
-      src.buffer = buf;
-      src.connect(owAudioCtx.destination);
-      src.start(scheduleBase + Math.max(0, delay));
-      owPlaySources.push(src);
-      console.log('[Lecture]', fname, '→', delay.toFixed(3) + 's');
+      schedule.push({ filename: obj.id + '-fx.wav', delay: Math.max(0, delay) });
     }
   }
-  console.log('[Lecture] ' + owPlaySources.length + ' source(s) programmée(s)');
+
+  if (window.api?.playScheduledFiles) {
+    await window.api.playScheduledFiles(owFilePath, schedule);
+    console.log('[Lecture] ' + schedule.length + ' fichier(s) → SoX/JACK');
+  }
 }
 
 let owPlayTimer = null;
