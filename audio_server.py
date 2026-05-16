@@ -394,6 +394,25 @@ def _jack_lsp_connections() -> dict:
     return result
 
 
+def jack_disconnect_system(client_prefix: str = "prosound"):
+    """Déconnecte toutes les sorties du client JACK de system:playback_*.
+    Appelé après le démarrage du stream (JACK crée des connexions auto)."""
+    if not sys.platform.startswith("linux"):
+        return
+    time.sleep(0.8)   # laisser JACK établir ses connexions automatiques
+    current = _jack_lsp_connections()
+    for src, dsts in current.items():
+        if not src.startswith(client_prefix + ":"):
+            continue
+        for dst in dsts:
+            if dst.startswith("system:playback_"):
+                rc, err = _jack_cli(["jack_disconnect", src, dst])
+                if rc == 0:
+                    log.info("JACK: déconnecté %s → %s", src, dst)
+                elif "No such port" not in err:
+                    log.warning("JACK: échec déconnexion %s → %s : %s", src, dst, err)
+
+
 def jack_save_connections():
     """Sauvegarde les connexions JACK courantes (hors system:*) via jack_lsp."""
     if not sys.platform.startswith("linux"):
@@ -611,8 +630,10 @@ class AudioMixer:
             "Stream démarré : %d Hz, %d canaux, device=%s",
             self.sample_rate, self.channels, self.device_index,
         )
-        # JACK : restaurer les connexions sauvegardées si elles existent
+        # JACK : déconnecter system:playback_* puis restaurer les connexions sauvegardées
         if sys.platform.startswith("linux") and self.device_index is not None:
+            threading.Thread(target=jack_disconnect_system,
+                             daemon=True, name="jack-disconnect-sys").start()
             threading.Thread(target=jack_restore_connections,
                              daemon=True, name="jack-restore").start()
 
