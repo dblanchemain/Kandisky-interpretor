@@ -859,8 +859,9 @@ let owSpatialPrefs = {
   hoaNorm: 'sn3d',      // 'sn3d' | 'n3d'
   hoaFormat: 'acn',     // 'acn' | 'fuma'
 };
-let owNextSecId  = 1;
-let owNextGrpId  = 1;
+let owNextSecId      = 1;
+let owNextGrpId      = 1;
+let owNextObjGlobalId = 0;  // compteur global d'IDs d'objets audio, unique sur toute la partition
 let owActiveGrp  = null;
 let owFilePath   = null;
 let owImagesDir  = '';
@@ -949,7 +950,7 @@ function owNouveau() {
   owCloseMenus();
   if (owModified && !confirm('Nouveau projet ? Les modifications non sauvegardées seront perdues.')) return;
   owSections = []; owGroups = []; owNuanceInsts = [];
-  owNextSecId = 1; owNextGrpId = 1; owNextNuInstId = 1;
+  owNextSecId = 1; owNextGrpId = 1; owNextNuInstId = 1; owNextObjGlobalId = 0;
   owActiveGrp = null; owActiveSec = null; owFilePath = null; owSetModified(false);
   interpGrpData = {};
   owTempoBySection = {}; owGainBySection = {}; owNuanceInstsBySection = {};
@@ -2142,6 +2143,9 @@ function owComputeGrpObjets(grp) {
   if (grp.augDim    && grp.augDimVal)                         objs = owTrAugm(objs, grp.augDimVal);
   if (grp.expansion && grp.expansionVal)                             objs = owTrExpansion(objs, grp.expansionVal);
 
+  if (grp._objGlobalBase !== undefined) {
+    objs.forEach((o, i) => { o.id = 'objet' + (grp._objGlobalBase + i); });
+  }
   grp.owTableObjets = objs;
   owTableObjets[grp.id] = objs;
   return objs;
@@ -3183,6 +3187,7 @@ if (typeof window.api !== 'undefined') {
         const xml  = nl > -1 ? rest.substring(nl + 1) : rest;
         owFilePath  = fp;
         owImagesDir = fp ? fp.replace(/[/\\][^/\\]*$/, '') + '/Images' : '';
+        owNextObjGlobalId = 0;
         owParseData(xml, fp.split(/[\\/]/).at(-1) || 'partition.xml');
         break;
       }
@@ -3199,6 +3204,11 @@ if (typeof window.api !== 'undefined') {
         if (!grpDiv) break;
         interpGrpData[grp.id] = { xml: grpXml, imgBase };
         drawObjets(grpXml, grpDiv, imgBase);
+        if (grp._objGlobalBase === undefined) {
+          const _parsed = owParseGrpXml(grp.id);
+          grp._objGlobalBase = owNextObjGlobalId;
+          owNextObjGlobalId += _parsed ? _parsed.audio.length : 0;
+        }
         owComputeGrpObjets(grp);
         break;
       }
