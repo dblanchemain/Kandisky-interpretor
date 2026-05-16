@@ -108,7 +108,10 @@
     }
     #secondaire {
       top: 26px !important;
+      left: 200px !important;
+      width: calc(100vw - 200px) !important;
       height: calc(100vh - 26px) !important;
+      overflow: hidden !important;
     }
 
     /* ── Réglette ── */
@@ -3650,8 +3653,9 @@ const owWork = document.getElementById('work');
 
 function owMousePosToTime(e) {
   // Position X dans le repère scroll (viewport scroll px)
-  const sc   = document.getElementById('owWorkScroll');
-  const posX = (sc ? sc.scrollLeft : 0) + e.clientX - 200;
+  const sc    = document.getElementById('owWorkScroll');
+  const secX  = document.getElementById('secondaire').getBoundingClientRect().left;
+  const posX  = (sc ? sc.scrollLeft : 0) + e.clientX - secX;
   owSetCompteur(Math.max(0, posX));
 }
 
