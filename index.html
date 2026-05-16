@@ -425,6 +425,37 @@
     }
     .nuance-row label { width: 52px; font-weight: bold; font-size: 0.85em; }
     .nuance-row input[type=number] { width: 70px; }
+
+    /* ── Transport ── */
+    #owTransport {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      padding: 4px 2px;
+      border-bottom: 1px solid #ccc;
+    }
+    #owTransport span {
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      border-radius: 3px;
+      padding: 1px;
+    }
+    #owTransport span:hover { background: #d0e4ff; }
+    #owTransport span.playing svg polyline,
+    #owTransport span.playing svg path,
+    #owTransport span.playing svg rect { fill: #e05; }
+    #owBtnRefresh {
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-left: 6px;
+      padding: 2px;
+      border-radius: 3px;
+    }
+    #owBtnRefresh:hover { background: #d0e4ff; }
   </style>
 </head>
 <body>
@@ -457,6 +488,17 @@
 <!-- ════════════════════════ PANNEAU GAUCHE ════════════════════════ -->
 <div id="principal">
   <h2 style="font-size:0.95em;margin:4px 0;">Interpretor</h2>
+
+  <!-- Boutons transport -->
+  <div id="owTransport">
+    <span id="play1" onclick="playerDebut()" title="Début"><svg width='30' height='40' viewBox='0 0 70 90' xmlns='http://www.w3.org/2000/svg'><rect x='0' y='20' width="20" height="20" fill='#2373b2' stroke-width='0' transform='translate(50 24)'/><rect x='0' y='10' width="10" height="40" fill='#2373b2' stroke-width='0' transform='translate(10 24)'/><polyline points='0,20 40,0 40,40 0,20' fill='#2373b2' transform='translate(14 34)' stroke-width='0'/></svg></span>
+    <span id="play2" onclick="playerPrec()" title="Précédent"><svg width='30' height='40' viewBox='0 0 70 90' xmlns='http://www.w3.org/2000/svg'><rect x='0' y='20' width="20" height="20" fill='#2373b2' stroke-width='0' transform='translate(40 24)'/><polyline points='0,20 40,0 40,40 0,20' fill='#2373b2' transform='translate(4 34)' stroke-width='0'/></svg></span>
+    <span id="play3" onclick="readPart()" title="Lecture"><svg width='20' height='40' viewBox='0 0 40 90' xmlns='http://www.w3.org/2000/svg'><path d='M0,40 0,5 30,20 0,35' fill='#2373b2' transform='translate(8 34)' stroke='#2373b2' stroke-width='10'/></svg></span>
+    <span id="play4" onclick="playerSuiv()" title="Suivant"><svg width='30' height='40' viewBox='0 0 70 90' xmlns='http://www.w3.org/2000/svg'><rect x='0' y='20' width="20" height="20" fill='#2373b2' stroke-width='0' transform='translate(14 24)'/><polyline points='0,40 0,0 40,20 0,40' fill='#2373b2' transform='translate(31 34)' stroke-width='0'/></svg></span>
+    <span id="play5" onclick="playerEnd()" title="Fin"><svg width='30' height='40' viewBox='0 0 70 90' xmlns='http://www.w3.org/2000/svg'><rect x='0' y='20' width="20" height="20" fill='#2373b2' stroke-width='0' transform='translate(17 24)'/><polyline points='0,40 0,0 40,20 0,40' fill='#2373b2' transform='translate(34 34)' stroke-width='0'/><rect x='0' y='10' width="10" height="40" fill='#2373b2' stroke-width='0' transform='translate(70 24)'/></svg></span>
+    <span id="owBtnRefresh" onclick="owRefreshAll()" title="Mettre à niveau tous les objets"><img src="images/refresh.svg" width="20" height="20"/></span>
+  </div>
+
   <div id="owSectionHeader">Sections</div>
   <div id="owSectionList"></div>
   <div id="owNuanceHeader">Nuances</div>
@@ -2987,6 +3029,81 @@ let owBarVertTime = 0;
 function owResetBarVert() {
   document.getElementById('owBarVerticale').style.left = '0px';
   owBarVertTime = 0;
+}
+
+// ═══════════════════════════════════════════════
+//  TRANSPORT
+// ═══════════════════════════════════════════════
+
+function owMoveBarTo(px) {
+  const x = Math.max(0, px);
+  const bar = document.getElementById('owBarVerticale');
+  bar.style.left = x + 'px';
+  owBarVertTime  = x / (OW_BASE_PX * owZoomScale);
+  owSetCompteur(x);
+}
+
+function playerDebut() {
+  owMoveBarTo(0);
+}
+
+function playerEnd() {
+  if (owActiveSec === null) { owMoveBarTo(0); return; }
+  const grps = owGroups.filter(g => g.sectionId === owActiveSec);
+  if (!grps.length) { owMoveBarTo(0); return; }
+  const maxX = Math.max(...grps.map(g => ((g.posX || 0) + (g.w || 0)) * owZoomScale));
+  owMoveBarTo(maxX);
+}
+
+function playerPrec() {
+  if (owActiveSec === null) return;
+  const curPx = parseFloat(document.getElementById('owBarVerticale').style.left) || 0;
+  const positions = owGroups
+    .filter(g => g.sectionId === owActiveSec)
+    .map(g => (g.posX || 0) * owZoomScale)
+    .filter(x => x < curPx - 2)
+    .sort((a, b) => b - a);
+  owMoveBarTo(positions.length ? positions[0] : 0);
+}
+
+function playerSuiv() {
+  if (owActiveSec === null) return;
+  const curPx = parseFloat(document.getElementById('owBarVerticale').style.left) || 0;
+  const positions = owGroups
+    .filter(g => g.sectionId === owActiveSec)
+    .map(g => (g.posX || 0) * owZoomScale)
+    .filter(x => x > curPx + 2)
+    .sort((a, b) => a - b);
+  if (positions.length) owMoveBarTo(positions[0]);
+}
+
+let owPlayTimer = null;
+function readPart() {
+  const btn = document.getElementById('play3');
+  if (owPlayTimer) {
+    clearInterval(owPlayTimer);
+    owPlayTimer = null;
+    btn.classList.remove('playing');
+    return;
+  }
+  btn.classList.add('playing');
+  const frameMs = 50;
+  owPlayTimer = setInterval(() => {
+    const bar = document.getElementById('owBarVerticale');
+    const cur = parseFloat(bar.style.left) || 0;
+    owMoveBarTo(cur + OW_BASE_PX * owZoomScale * frameMs / 1000);
+  }, frameMs);
+}
+
+function owRefreshAll() {
+  if (owActiveSec === null) return;
+  owGroups.filter(g => g.sectionId === owActiveSec).forEach(grp => {
+    const div = document.getElementById('grp' + grp.id);
+    if (!div) return;
+    const d = interpGrpData[grp.id];
+    if (d) drawObjets(d.xml, div, d.imgBase);
+    if (grp.owTableObjets?.length) owDrawTransformOverlay(grp, div);
+  });
 }
 
 // Contexte audio – taux d'échantillonnage
