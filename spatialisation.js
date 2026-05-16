@@ -7,7 +7,7 @@ function owGenerateSpatDSP(layout, numInputs) {
   const M  = sp.length;
   const makeTable = field =>
     sp.map((s, i) =>
-      `tabSpeaker${field.charAt(0).toUpperCase()+field.slice(1)}(${i+1}) = ${s[field]};`
+      `tabSpeaker${field.charAt(0).toUpperCase()+field.slice(1)}(${i}) = ${s[field]};`
     ).join('\n');
 
   return `
