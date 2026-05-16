@@ -2148,6 +2148,7 @@ function owComputeGrpObjets(grp) {
   }
   grp.owTableObjets = objs;
   owTableObjets[grp.id] = objs;
+  console.log('[owTableObjets] grp', grp.id, '(' + (grp.name||'') + ')', objs.map(o => o.id));
   return objs;
 }
 
