@@ -108,7 +108,10 @@
     }
     #secondaire {
       top: 26px !important;
+      left: 200px !important;
+      width: calc(100vw - 200px) !important;
       height: calc(100vh - 26px) !important;
+      overflow: hidden !important;
     }
 
     /* ── Réglette ── */
@@ -3489,7 +3492,8 @@ function owRefreshAll() {
 //  WORKSPACE : adapte #work à la fenêtre visible
 // ═══════════════════════════════════════════════
 function owUpdateWorkspace() {
-  const w    = window.innerWidth  - 200;   // 200 = panneau gauche
+  const sec  = document.getElementById('secondaire');
+  const w    = sec ? sec.clientWidth  : (window.innerWidth  - 200);
   const h    = window.innerHeight - 26 - 38; // menuBar + paramGlobal
   const work  = document.getElementById('work');
   const work2 = document.getElementById('work2');
