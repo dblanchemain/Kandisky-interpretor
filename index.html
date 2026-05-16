@@ -3369,6 +3369,10 @@ function owAudioConnect() {
           const el = document.getElementById('owSonStatus');
           if (el) el.textContent = msg.changed ? ('Device ' + msg.device + ' actif') : 'Inchangé';
         }
+        if (msg.type === 'voice_ended') {
+          _owPendingVoices = Math.max(0, _owPendingVoices - 1);
+          if (_owPendingVoices === 0) owStopBar();
+        }
       } catch(e) {}
     };
   } catch(e) { console.warn('[AudioWS] Erreur:', e.message); }
@@ -3379,11 +3383,22 @@ function owAudioSend(obj) {
     owAudioWs.send(JSON.stringify(obj));
 }
 
-let _owPlayTimers = [];
+let _owPlayTimers    = [];
+let _owPendingVoices = 0;
+
+function owStopBar() {
+  if (!owPlayTimer) return;
+  clearInterval(owPlayTimer);
+  owPlayTimer = null;
+  const btn = document.getElementById('play3');
+  const p   = btn?.querySelector('path');
+  if (p) p.setAttribute('d', _SVG_PLAY);
+}
 
 function owStopAudio() {
   _owPlayTimers.forEach(t => clearTimeout(t));
-  _owPlayTimers = [];
+  _owPlayTimers    = [];
+  _owPendingVoices = 0;
   owAudioSend({ cmd: 'stop' });
 }
 
@@ -3418,7 +3433,8 @@ async function owStartAudio() {
       const waitMs = Math.max(0, Math.round(delay * 1000) - (Date.now() - t0));
       const vid    = String(obj.id);
       const fp     = absPath;
-      _owPlayTimers.push(setTimeout(() => owAudioSend({ cmd: 'play', id: vid, file: fp, notify_end: false }), waitMs));
+      _owPendingVoices++;
+      _owPlayTimers.push(setTimeout(() => owAudioSend({ cmd: 'play', id: vid, file: fp, notify_end: true }), waitMs));
       count++;
     }
   }
@@ -3433,9 +3449,7 @@ function readPart() {
   const btn  = document.getElementById('play3');
   const path = btn.querySelector('path');
   if (owPlayTimer) {
-    clearInterval(owPlayTimer);
-    owPlayTimer = null;
-    if (path) path.setAttribute('d', _SVG_PLAY);
+    owStopBar();
     owStopAudio();
     return;
   }
