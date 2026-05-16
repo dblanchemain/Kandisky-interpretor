@@ -202,62 +202,54 @@ ipcMain.handle('audiosSaveFile', (_, partitionPath, subfolder, filename, data) =
 });
 
 // ── Serveur audio Python (audio_server.py) ────────────────────────────────────
-const AUDIO_SERVER_PORT = 9876;
 let audioServerProc = null;
 
-function _notifyAudioServerReady() {
-  console.log('[AudioServer] Prêt sur port', AUDIO_SERVER_PORT);
-  win?.webContents.send('fromMain', 'audioServerReady');
+function findFreePort(start) {
+  return new Promise((resolve, reject) => {
+    const srv = net.createServer();
+    srv.listen(start, '127.0.0.1', () => {
+      const p = srv.address().port;
+      srv.close(() => resolve(p));
+    });
+    srv.on('error', () => {
+      if (start >= 9999) reject(new Error('Aucun port libre entre 9876 et 9999'));
+      else findFreePort(start + 1).then(resolve).catch(reject);
+    });
+  });
 }
 
-function _doSpawnAudioServer() {
+function spawnAudioServer() {
   const pyScript = path.join(__dirname, 'audio_server.py');
   if (!fs.existsSync(pyScript)) {
     console.warn('[AudioServer] audio_server.py introuvable');
     return;
   }
-  audioServerProc = spawn('python3', [pyScript], {
-    env: { ...process.env },
-    stdio: ['ignore', 'pipe', 'pipe']
-  });
-  let buf = '';
-  audioServerProc.stdout.on('data', chunk => {
-    buf += chunk.toString();
-    let nl;
-    while ((nl = buf.indexOf('\n')) !== -1) {
-      const line = buf.slice(0, nl).trim();
-      buf = buf.slice(nl + 1);
-      if (line === 'AUDIO_SERVER_READY') {
-        _notifyAudioServerReady();
-      } else if (line) {
-        process.stdout.write('[AudioServer] ' + line + '\n');
+  findFreePort(9876).then(port => {
+    audioServerProc = spawn('python3', [pyScript, '--port', String(port)], {
+      env: { ...process.env },
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+    let buf = '';
+    audioServerProc.stdout.on('data', chunk => {
+      buf += chunk.toString();
+      let nl;
+      while ((nl = buf.indexOf('\n')) !== -1) {
+        const line = buf.slice(0, nl).trim();
+        buf = buf.slice(nl + 1);
+        if (line === 'AUDIO_SERVER_READY') {
+          console.log('[AudioServer] Prêt sur port', port);
+          win?.webContents.send('fromMain', 'audioServerReady;' + port);
+        } else if (line) {
+          process.stdout.write('[AudioServer] ' + line + '\n');
+        }
       }
-    }
-  });
-  audioServerProc.stderr.on('data', d => process.stderr.write('[AudioServer] ' + d.toString()));
-  audioServerProc.on('exit', (code, sig) => {
-    console.log('[AudioServer] Terminé (code=' + code + ', signal=' + sig + ')');
-    audioServerProc = null;
-  });
-}
-
-function spawnAudioServer() {
-  // Si quelque chose écoute déjà sur le port, l'utiliser directement
-  const probe = net.createConnection({ port: AUDIO_SERVER_PORT, host: '127.0.0.1' });
-  probe.setTimeout(300);
-  probe.on('connect', () => {
-    probe.destroy();
-    console.log('[AudioServer] Serveur déjà actif — réutilisation');
-    _notifyAudioServerReady();
-  });
-  probe.on('error', () => {
-    probe.destroy();
-    _doSpawnAudioServer();
-  });
-  probe.on('timeout', () => {
-    probe.destroy();
-    _doSpawnAudioServer();
-  });
+    });
+    audioServerProc.stderr.on('data', d => process.stderr.write('[AudioServer] ' + d.toString()));
+    audioServerProc.on('exit', (code, sig) => {
+      console.log('[AudioServer] Terminé (code=' + code + ', signal=' + sig + ')');
+      audioServerProc = null;
+    });
+  }).catch(err => console.error('[AudioServer] findFreePort:', err.message));
 }
 
 // ── Résolution du chemin absolu d'un fichier audio ────────────────────────────
