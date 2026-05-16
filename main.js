@@ -201,6 +201,16 @@ ipcMain.handle('audiosSaveFile', (_, partitionPath, subfolder, filename, data) =
   } catch(e) { console.error('audiosSaveFile:', e); return false; }
 });
 
+// ── Binaires embarqués (resources/bin/<os>/) ──────────────────────────────────
+function findBundledBin(name) {
+  const sub = process.platform === 'win32' ? 'win'
+             : process.platform === 'darwin' ? 'mac' : 'linux';
+  const ext = process.platform === 'win32' ? '.exe' : '';
+  const base = app.isPackaged ? process.resourcesPath : path.join(__dirname, 'resources');
+  const bin  = path.join(base, 'bin', sub, name + ext);
+  return fs.existsSync(bin) ? bin : null;
+}
+
 // ── Serveur audio Python (audio_server.py) ────────────────────────────────────
 let audioServerProc = null;
 
@@ -225,8 +235,10 @@ function spawnAudioServer() {
     return;
   }
   findFreePort(9876).then(port => {
+    const rubberbandPath = findBundledBin('rubberband');
+    const extraEnv = rubberbandPath ? { RUBBERBAND_PATH: rubberbandPath } : {};
     audioServerProc = spawn('python3', [pyScript, '--port', String(port)], {
-      env: { ...process.env },
+      env: { ...process.env, ...extraEnv },
       stdio: ['ignore', 'pipe', 'pipe']
     });
     let buf = '';
