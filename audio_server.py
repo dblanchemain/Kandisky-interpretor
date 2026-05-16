@@ -394,6 +394,25 @@ def _jack_lsp_connections() -> dict:
     return result
 
 
+def jack_disconnect_system(client_prefix: str = "prosound"):
+    """Déconnecte toutes les sorties du client JACK de system:playback_*.
+    Appelé après le démarrage du stream (JACK crée des connexions auto)."""
+    if not sys.platform.startswith("linux"):
+        return
+    time.sleep(0.8)   # laisser JACK établir ses connexions automatiques
+    current = _jack_lsp_connections()
+    for src, dsts in current.items():
+        if not src.startswith(client_prefix + ":"):
+            continue
+        for dst in dsts:
+            if dst.startswith("system:playback_"):
+                rc, err = _jack_cli(["jack_disconnect", src, dst])
+                if rc == 0:
+                    log.info("JACK: déconnecté %s → %s", src, dst)
+                elif "No such port" not in err:
+                    log.warning("JACK: échec déconnexion %s → %s : %s", src, dst, err)
+
+
 def jack_save_connections():
     """Sauvegarde les connexions JACK courantes (hors system:*) via jack_lsp."""
     if not sys.platform.startswith("linux"):
@@ -531,6 +550,7 @@ class AudioMixer:
         self.sample_rate   = 44100
         self.channels      = 2
         self.device_index: Optional[int] = None
+        self.master_gain   = 1.0
         # Injectés depuis la boucle asyncio pour notifier les fins de voix
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._notify_queue: Optional[asyncio.Queue]     = None
@@ -579,6 +599,7 @@ class AudioMixer:
             for v in ended:
                 self.voices.pop(v.id, None)
 
+        mix *= self.master_gain
         np.clip(mix, -1.0, 1.0, out=mix)
         outdata[:] = mix
 
@@ -611,8 +632,10 @@ class AudioMixer:
             "Stream démarré : %d Hz, %d canaux, device=%s",
             self.sample_rate, self.channels, self.device_index,
         )
-        # JACK : restaurer les connexions sauvegardées si elles existent
+        # JACK : déconnecter system:playback_* puis restaurer les connexions sauvegardées
         if sys.platform.startswith("linux") and self.device_index is not None:
+            threading.Thread(target=jack_disconnect_system,
+                             daemon=True, name="jack-disconnect-sys").start()
             threading.Thread(target=jack_restore_connections,
                              daemon=True, name="jack-restore").start()
 
@@ -799,9 +822,9 @@ _raw_cache_lock = threading.Lock()
 
 def _cached_sf_read(file_path: str) -> tuple[np.ndarray, int]:
     """sf.read() avec cache en mémoire, invalidé automatiquement si le fichier change.
-    Les fichiers *-fx.wav sont toujours relus depuis le disque (évite les lectures périmées
-    lors du chargement de projet où readSimpleAudioA regénère les fichiers de façon asynchrone)."""
-    if file_path.endswith('-fx.wav'):
+    Les fichiers du dossier interprete/ sont toujours relus depuis le disque (évite les lectures
+    périmées lors du traitement audio qui regénère ces fichiers de façon asynchrone)."""
+    if '/interprete/' in file_path or '\\interprete\\' in file_path:
         data, sr = sf.read(file_path, dtype="float32", always_2d=True)
         return data, sr
     try:
@@ -895,6 +918,11 @@ async def dispatch(ws: "WebSocketServerProtocol", msg: dict):
         await reply({"type": "device_set", "device": mixer.device_index,
                      "channels": mixer.channels, "changed": changed})
 
+    elif cmd == "set_volume":
+        db = float(msg.get("db", 0))
+        mixer.master_gain = 10 ** (db / 20)
+        await reply({"type": "volume_set", "db": db})
+
     elif cmd == "info":
         await cmd_info(ws, msg, reply)
 
@@ -923,6 +951,9 @@ async def cmd_play(ws: "WebSocketServerProtocol", params: dict, reply):
     notify_end        = bool(params.get("notify_end", True))
     compensate_delay  = bool(params.get("compensate_delay", False))
     t_sent_ms         = params.get("t_sent")   # horodatage JS (ms)
+
+    file_path = params.get("file", "?")
+    log.info("▶ %s  [%s]", os.path.basename(file_path), voice_id)
 
     t_before = time.time()
 
@@ -983,7 +1014,6 @@ async def cmd_play(ws: "WebSocketServerProtocol", params: dict, reply):
         voice = Voice(voice_id, data.astype(np.float32), notify_end=notify_end)
         mixer.add_voice(voice)
         await reply({"type": "playing", "id": voice_id})
-        log.info("Lecture : id=%s  file=%s", voice_id, params.get("file", "?"))
 
     except FileNotFoundError:
         errmsg = f"Fichier introuvable : {params.get('file', '?')}"
@@ -998,9 +1028,9 @@ async def cmd_preload(ws: "WebSocketServerProtocol", msg: dict, reply):
     """Pré-charge un fichier audio en mémoire sans le lire."""
     file_path = msg.get("file", "")
     try:
-        # Pour les *-fx.wav : toujours relire (bypass cache), donc never "already"
-        is_fx = file_path.endswith('-fx.wav')
-        already = (not is_fx) and (file_path in _raw_cache)
+        # Fichiers interprete/ : toujours relire (bypass cache)
+        is_interp = '/interprete/' in file_path or '\\interprete\\' in file_path
+        already = (not is_interp) and (file_path in _raw_cache)
         if not already:
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(None, _cached_sf_read, file_path)
