@@ -2336,29 +2336,8 @@ async function owMiseANiveauComplete(grp) {
     const filename = origObj.id + '.wav';
     if (status) status.textContent = `Traitement ${filename}…`;
 
-    // 1. Lecture source originale (Audios/)
-    const raw = await window.api.readAudioFile(owFilePath, filename);
-    if (!raw) { console.warn('[MAJ] introuvable :', filename); continue; }
-    let audioBuf;
-    try {
-      const ctx = new AudioContext();
-      audioBuf  = await ctx.decodeAudioData(new Uint8Array(raw).buffer.slice(0));
-      await ctx.close();
-    } catch(e) {
-      try { audioBuf = owDecodeWavManual(new Uint8Array(raw).buffer); }
-      catch(e2) { console.warn('[MAJ] décodage échoué :', filename); continue; }
-    }
-
-    const sr  = audioBuf.sampleRate;
-    const nCh = audioBuf.numberOfChannels;
-
-    // 2. Trim (debut / fin)
-    const debut     = origObj.debut ?? 0;
-    const fin       = origObj.fin   ?? 1;
-    const trimStart = Math.floor(debut * audioBuf.length);
-    const trimLen   = Math.max(1, Math.floor(fin * audioBuf.length) - trimStart);
-
-    // 3. Transposition
+    // 1. Transposition (les WAV de Audios/ sont déjà finalisés par kandiskyscore)
+    const objScorePx = grp.posX + (origObj.posX - ctn.ctnX) * sx0;
     let transpFactor = 1;
     if (grp.transposition && origObj.flagTranspo !== 0) {
       const origRef = owPitchRef(origObj);
@@ -2367,46 +2346,40 @@ async function owMiseANiveauComplete(grp) {
       const nF = (SPACE_H - newRef)  / (SPACE_H / 2);
       if (oF > 0 && nF > 0) transpFactor = nF / oF;
     }
-    const newLen = Math.max(1, Math.round(trimLen / transpFactor));
 
-    const offCtx  = new OfflineAudioContext(nCh, newLen, sr);
-    const sliced  = offCtx.createBuffer(nCh, trimLen, sr);
-    for (let c = 0; c < nCh; c++)
-      sliced.copyToChannel(audioBuf.getChannelData(c).slice(trimStart, trimStart + trimLen), c);
-
-    const srcNode = offCtx.createBufferSource();
-    srcNode.buffer = sliced;
-    srcNode.playbackRate.value = transpFactor;
-    srcNode.connect(offCtx.destination);
-    srcNode.start(0);
-    const rendered = await offCtx.startRendering();
-
-    // 4. Fades uniquement (courbe de gain appliquée en temps réel à la lecture via gain_env)
-    const objScorePx  = grp.posX + (origObj.posX - ctn.ctnX) * sx0;
-    const envx        = origObj.envx?.length >= 2 ? origObj.envx : [0, 1];
-    const fadeInFrac  = envx[0] || 0;
-    const fadeOutFrac = 1 - (envx[1] ?? 1);
-    const n = rendered.length;
-
-    if (fadeInFrac > 0 || fadeOutFrac > 0) {
-      for (let c = 0; c < rendered.numberOfChannels; c++) {
-        const data = rendered.getChannelData(c);
-        for (let i = 0; i < n; i++) {
-          const frac = n > 1 ? i / (n - 1) : 0;
-          let g = 1;
-          if (fadeInFrac  > 0 && frac < fadeInFrac)        g *= frac / fadeInFrac;
-          if (fadeOutFrac > 0 && frac > (1 - fadeOutFrac)) g *= (1 - frac) / fadeOutFrac;
-          data[i] *= g;
-        }
+    if (Math.abs(transpFactor - 1) > 1e-4) {
+      const raw = await window.api.readAudioFile(owFilePath, filename);
+      if (!raw) { console.warn('[MAJ] introuvable :', filename); continue; }
+      let audioBuf;
+      try {
+        const ctx = new AudioContext();
+        audioBuf  = await ctx.decodeAudioData(new Uint8Array(raw).buffer.slice(0));
+        await ctx.close();
+      } catch(e) {
+        try { audioBuf = owDecodeWavManual(new Uint8Array(raw).buffer); }
+        catch(e2) { console.warn('[MAJ] décodage transpo échoué :', filename); continue; }
       }
+      const sr = audioBuf.sampleRate, nCh = audioBuf.numberOfChannels;
+      const srcLen = audioBuf.length;
+      const newLen = Math.max(1, Math.round(srcLen / transpFactor));
+      const offCtx = new OfflineAudioContext(nCh, newLen, sr);
+      const srcNode = offCtx.createBufferSource();
+      srcNode.buffer = audioBuf;
+      srcNode.playbackRate.value = transpFactor;
+      srcNode.connect(offCtx.destination);
+      srcNode.start(0);
+      const rendered = await offCtx.startRendering();
+      const wavData  = owAudioBufferToWav(rendered);
+      await window.api.saveAudioFile(owFilePath, 'interprete', filename, wavData);
+    } else {
+      // Pas de transposition : copier le fichier original tel quel dans interprete/
+      const raw = await window.api.readAudioFile(owFilePath, filename);
+      if (!raw) { console.warn('[MAJ] introuvable :', filename); continue; }
+      await window.api.saveAudioFile(owFilePath, 'interprete', filename, new Uint8Array(raw).buffer);
     }
-
-    // 5. Sauvegarde intermédiaire (mono/stéréo, après transposition+fades)
-    const wavData = owAudioBufferToWav(rendered);
-    await window.api.saveAudioFile(owFilePath, 'interprete', filename, wavData);
     count++;
 
-    // 6. Tempo (Rubberband CLI)
+    // 2. Tempo (Rubberband CLI)
     if (grp.variationTempo && origObj.duree) {
       const map = owBuildTempoMapForNote(objScorePx, origObj.duree);
       const ys  = map.map(p => p.y);
@@ -2418,7 +2391,7 @@ async function owMiseANiveauComplete(grp) {
         });
     }
 
-    // 7. Spatialisation (Faust offline)
+    // 3. Spatialisation (Faust offline)
     if (window.owWamSpat) await owSpatialiserObjet(origObj, filename);
   }
 
@@ -3801,25 +3774,21 @@ async function owStartAudio() {
       const absPath  = await window.api?.resolveAudioPath?.(owFilePath, filename);
       if (!absPath) continue;
 
-      // Si le fichier vient de interprete/, transposition/tempo sont déjà appliqués
-      // La courbe de gain (variationIntensite) et vol s'appliquent toujours en temps réel
+      // interprete/ : transposition/tempo/spatialisation déjà appliqués
+      // variationIntensite : courbe de gain toujours appliquée en temps réel via gain_env
       const processed  = absPath.includes('/interprete/') || absPath.includes('\\interprete\\');
-      const vol        = obj.gain ?? 1.0;
       const tempoRatio = (!processed && grp.variationTempo) ? owTempoAtPx(objPx) : 1.0;
       const gainEnv    = grp.variationIntensite
         ? owExtractGainEnvelope(objPx, obj.duree) : null;
       const waitMs = Math.max(0, Math.round(delay * 1000) - (Date.now() - t0));
       const vid    = String(obj.id);
       _owPendingVoices++;
-      const _playCmd = {
+      _owPlayTimers.push(setTimeout(() => owAudioSend({
         cmd: 'play', id: vid, file: absPath,
-        ...(Math.abs(vol - 1) > 1e-4         ? { vol }                   : {}),
         ...(Math.abs(tempoRatio - 1) > 1e-4  ? { tempo_ratio: tempoRatio } : {}),
         ...(gainEnv                           ? { gain_env: gainEnv }     : {}),
         notify_end: true
-      };
-      console.log('[Gain DBG] play cmd:', JSON.stringify(_playCmd).slice(0, 200));
-      _owPlayTimers.push(setTimeout(() => owAudioSend(_playCmd), waitMs));
+      }), waitMs));
       count++;
     }
   }
