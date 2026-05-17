@@ -804,6 +804,17 @@ def load_and_process(params: dict) -> tuple[np.ndarray, int]:
     if abs(vol - 1.0) > 1e-6:
         data = (data * vol).astype(np.float32)
 
+    # ── Enveloppe de gain (variationIntensite) ──────────────────────────────
+    # gain_env = [{frac: 0..1, v: gain}] interpolé sur les frames réelles.
+    gain_env = params.get("gain_env")
+    if gain_env and len(gain_env) >= 2:
+        n      = len(data)
+        fracs  = np.array([p["frac"] for p in gain_env], dtype=np.float64)
+        gains  = np.array([p["v"]    for p in gain_env], dtype=np.float64)
+        frames = np.linspace(0.0, 1.0, n, dtype=np.float64)
+        envelope = np.interp(frames, fracs, gains).astype(np.float32)
+        data = (data * envelope[:, np.newaxis]).astype(np.float32)
+
     # ── Fades ─────────────────────────────────────────────────────────────────
     if fade_in_len > 0.0 or fade_out_len > 0.0:
         data = apply_fades(data, sr, fade_in_type, fade_in_len, fade_out_type, fade_out_len)

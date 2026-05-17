@@ -20,4 +20,7 @@ contextBridge.exposeInMainWorld('api', {
 
   // Résolution du chemin absolu d'un fichier audio (pour audio_server.py)
   resolveAudioPath: (partitionPath, filename) => ipcRenderer.invoke('resolveAudioPath', partitionPath, filename),
+
+  // Rubberband tempo : time-stretch un fichier WAV selon une courbe de tempo
+  processTempoNote: (info) => ipcRenderer.invoke('processTempoNote', info),
 });

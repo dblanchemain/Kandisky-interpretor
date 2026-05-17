@@ -484,15 +484,17 @@
   <div class="mnu-item" id="mnuFichier">Fichier
     <ul class="mnu-drop">
       <li onclick="owOuvrir()">Ouvrir une partition</li>
-      <li onclick="owSauvegarder()">Sauvegarder</li>
-      <li onclick="owSauvegarderSous()">Sauvegarder sous</li>
+      <li onclick="owSauvegarder()" title="Ctrl+S">Sauvegarder (courante)</li>
+      <li onclick="owSauvegarderSous()" title="Ctrl+Shift+S">Sauvegarder sous…</li>
     </ul>
   </div>
 
   <div class="mnu-item" id="mnuEdition">Édition
     <ul class="mnu-drop">
+      <li onclick="owEtatProjet()">État du projet</li>
       <li onclick="owPermuter()">Permuter deux sections</li>
       <li onclick="owParamsGroupe()">Paramètres</li>
+      <li onclick="owExportMulticanal()">Exporter partition multicanal</li>
     </ul>
   </div>
 
@@ -814,6 +816,17 @@
   </div>
 </div>
 
+<!-- ════════════════════════ POPUP : État du projet ════════════════════════ -->
+<div id="etatProjetPopup" class="ow-popup" style="display:none;top:80px;left:160px;width:480px;">
+  <div id="etatProjetPopupHeader" class="ow-popup-hd">État du projet</div>
+  <div class="ow-popup-body" style="padding:8px 12px;font-size:0.80em;max-height:480px;overflow-y:auto;">
+    <div id="etatProjetContent" style="white-space:pre;font-family:monospace;line-height:1.5;"></div>
+  </div>
+  <div class="ow-popup-foot">
+    <button onclick="document.getElementById('etatProjetPopup').style.display='none'">Fermer</button>
+  </div>
+</div>
+
 <!-- ════════════════════════ POPUP : Paramètres de lecture groupe ════════════════════════ -->
 <div id="grpPlayPopup" class="ow-popup" style="width:270px;">
   <div class="ow-popup-hd" id="grpPlayPopupHd">Paramètres de lecture</div>
@@ -865,12 +878,21 @@ let owNextObjGlobalId = 0;  // compteur global d'IDs d'objets audio, unique sur 
 let owActiveGrp  = null;
 let owFilePath   = null;
 let owImagesDir  = '';
+let owSrcDir     = '';   // répertoire source d'où la partition a été chargée (≠ owFilePath après SaveAs)
 let interpGrpData = {};   // {grpId: {xml, imgBase}} — cache XMLs de groupe
 let owTableObjets = {};  // {grpId: [{posX,posY,...}]} — objets audio transformés par groupe
-let owModified   = false;
+let owModified        = false;
+let owIsOriginalFile  = false;  // true = fichier KandiskyScore sans <activeSec> → protéger de l'écrasement
 function owSetModified(val) {
   owModified = val;
   window.api?.nsmDirty?.(val);
+  const lbl = document.getElementById('owFileLabel');
+  if (lbl) {
+    const base = (owFilePath || 'Sans titre').split(/[\\/]/).at(-1);
+    const prefix = val ? '* ' : '';
+    const suffix = owIsOriginalFile ? ' [original]' : '';
+    lbl.textContent = prefix + base + suffix;
+  }
 }
 let owTempoPoints = [];   // [{id,X,Y}]  X=pixels, Y=0..100  bpm=240-Y/0.4167
 let owGainPoints  = [];   // [{id,X,Y}]  gain=(100-Y)*0.05
@@ -951,7 +973,7 @@ function owNouveau() {
   if (owModified && !confirm('Nouveau projet ? Les modifications non sauvegardées seront perdues.')) return;
   owSections = []; owGroups = []; owNuanceInsts = [];
   owNextSecId = 1; owNextGrpId = 1; owNextNuInstId = 1; owNextObjGlobalId = 0;
-  owActiveGrp = null; owActiveSec = null; owFilePath = null; owSetModified(false);
+  owActiveGrp = null; owActiveSec = null; owFilePath = null; owSrcDir = ''; owIsOriginalFile = false; owSetModified(false);
   interpGrpData = {};
   owTempoBySection = {}; owGainBySection = {}; owNuanceInstsBySection = {};
   owTempoPoints = []; owGainPoints = []; owNbTempo = 1; owNbGain = 1;
@@ -991,12 +1013,18 @@ function owParseData(txt, label) {
     owGroups   = [];
     let secId  = 1;
     let grpId  = 1;
+    let maxSecId = 0;
+    let anySecIdSaved = false;
     doc.querySelectorAll('section').forEach(secEl => {
-      const id     = secId++;
+      const rawSecId = parseInt(secEl.getAttribute('id'));
+      let id;
+      if (!isNaN(rawSecId) && rawSecId > 0) { id = rawSecId; anySecIdSaved = true; }
+      else { id = secId++; }
+      if (id > maxSecId) maxSecId = id;
       const grpEls = [...secEl.querySelectorAll('groupe')];
       const posY   = grpEls.length
         ? Math.min(...grpEls.map(g => n(g.getAttribute('posY'), 0)))
-        : (secId - 2) * 100 + 20;
+        : id * 100 + 20;
       owSections.push({ id, name: secEl.getAttribute('name') || ('Section ' + id), posY, color: '#4a90d9' });
       grpEls.forEach(g => {
         owGroups.push({
@@ -1119,11 +1147,46 @@ function owParseData(txt, label) {
       if (id >= owNextNuInstId) owNextNuInstId = id + 1;
     });
 
-    owNextSecId = secId;
+    owNextSecId = Math.max(secId, maxSecId + 1);
     owNextGrpId = grpId;
     owActiveGrp = null;
     owSetModified(false);
-    owActiveSec = owSections.length ? owSections[0].id : null;
+
+    /* ── Restaurer la section active ── */
+    const _activeSec = doc.querySelector('interpretor > activeSec');
+    owIsOriginalFile = !_activeSec;   // fichier KandiskyScore sans balise <activeSec> = original à protéger
+    const _savedAct  = _activeSec ? parseInt(_activeSec.getAttribute('secid')) : NaN;
+    if (!isNaN(_savedAct) && owSections.find(s => s.id === _savedAct)) {
+      owActiveSec = _savedAct;
+    } else if (!anySecIdSaved) {
+      /* Ancien format : migration si courbes et groupes sont sur des sections différentes */
+      owActiveSec = null;
+      for (const sec of owSections) {
+        const hasGroups = owGroups.some(g => g.sectionId === sec.id);
+        const hasCurves = (owGainBySection[sec.id]?.points.length > 0) ||
+                          (owTempoBySection[sec.id]?.points.length > 0);
+        if (!hasGroups && hasCurves) {
+          const target = owSections.find(s =>
+            s.id !== sec.id &&
+            owGroups.some(g => g.sectionId === s.id) &&
+            !((owGainBySection[s.id]?.points.length > 0) || (owTempoBySection[s.id]?.points.length > 0))
+          );
+          if (target) {
+            owGainBySection[target.id]        = owGainBySection[sec.id];
+            owTempoBySection[target.id]       = owTempoBySection[sec.id];
+            owNuanceInstsBySection[target.id] = owNuanceInstsBySection[sec.id] || [];
+            owGainBySection[sec.id]        = { points: [], nb: 1 };
+            owTempoBySection[sec.id]       = { points: [], nb: 1 };
+            owNuanceInstsBySection[sec.id] = [];
+            owActiveSec = target.id;
+            break;
+          }
+        }
+      }
+      if (!owActiveSec) owActiveSec = owSections.length ? owSections[0].id : null;
+    } else {
+      owActiveSec = owSections.length ? owSections[0].id : null;
+    }
     owLoadSectionCurves(owActiveSec);
     owCloseAllPopups();
     owResetBarVert();
@@ -1136,7 +1199,7 @@ function owParseData(txt, label) {
     // Charger les XMLs de groupe pour drawObjets
     if (typeof window.api !== 'undefined') {
       owGroups.forEach(grp => {
-        if (grp.name) window.api.send('toMain', `interpLoadGrp;${grp.id};${grp.name};${grp.dir||''}`);
+        if (grp.name) window.api.send('toMain', `interpLoadGrp;${grp.id};${grp.name};${grp.dir||''};${owSrcDir}`);
       });
     }
   } catch(err) { alert('Erreur de chargement : ' + err.message); }
@@ -1149,7 +1212,7 @@ function owSerialise() {
   const sorted = [...owSections].sort((a, bk) => a.posY - bk.posY);
   let xml = "<?xml version='1.0' encoding='UTF-8' ?>\n<openwork version='2.1.1'>\n  <partition name=\"\">\n";
   sorted.forEach(sec => {
-    xml += `    <section name="${x(sec.name)}">\n`;
+    xml += `    <section name="${x(sec.name)}" id="${sec.id}">\n`;
     owGroups.filter(g => g.sectionId === sec.id).forEach(grp => {
       xml += `      <groupe name="${x(grp.name)}"`;
       xml += ` direct="${b(grp.direct)}" renversement="${b(grp.renversement)}"`;
@@ -1183,6 +1246,7 @@ function owSerialise() {
       xml += `    <nuanceinst secid="${sec.id}" id="${inst.id}" nom="${x(inst.nom)}" posX="${inst.posX}" posY="${inst.posY}" gainPtId="${x(inst.gainPtId)}" grpId="${inst.grpId ?? ''}"/>\n`;
     });
   });
+  xml += `    <activeSec secid="${owActiveSec ?? ''}"/>\n`;
   const sp = owSpatialPrefs;
   xml += `    <spatial greffon="${sp.greffon}" nbCanaux="${sp.nbCanaux}"` +
     ` vbapLayout="${sp.vbapLayout}" hoaOrdre="${sp.hoaOrdre}"` +
@@ -1193,6 +1257,11 @@ function owSerialise() {
 
 function owSauvegarder() {
   owCloseMenus();
+  if (owIsOriginalFile) {
+    alert('Ce fichier est une partition KandiskyScore originale.\nUtilisez « Sauvegarder sous… » pour créer un fichier d\'interprétation séparé.');
+    owSauvegarderSous();
+    return;
+  }
   if (typeof window.api !== 'undefined') {
     window.api.send('toMain', 'owSave;' + (owFilePath || '') + ';' + owSerialise());
   } else {
@@ -1291,6 +1360,36 @@ function owSupprimerSection() {
   }
   owSetModified(true);
   owRenderAll();
+}
+
+function owEtatProjet() {
+  owCloseMenus();
+  const sorted = [...owSections].sort((a, b) => a.posY - b.posY);
+  let lines = [];
+  let totalGrps = 0, totalObjs = 0;
+  for (const sec of sorted) {
+    const grps = owGroups.filter(g => g.sectionId === sec.id);
+    lines.push(`Section "${sec.name || sec.id}"  (${grps.length} groupe${grps.length !== 1 ? 's' : ''})`);
+    totalGrps += grps.length;
+    for (const grp of grps) {
+      const objs = grp.owTableObjets ?? [];
+      const tag  = grp.variationIntensite ? ' [∿gain]' : '';
+      lines.push(`  ▸ ${grp.name || grp.id}${tag}  —  ${objs.length} objet${objs.length !== 1 ? 's' : ''}`);
+      totalObjs += objs.length;
+      for (const obj of objs) {
+        const fileId   = obj._origId ?? obj.id;
+        const filename = fileId + '.wav';
+        const gainStr  = obj.gain != null ? obj.gain.toFixed(3) : '—';
+        lines.push(`      ${filename}  gain=${gainStr}`);
+      }
+    }
+  }
+  lines.unshift(`${sorted.length} section${sorted.length !== 1 ? 's' : ''}  ·  ${totalGrps} groupe${totalGrps !== 1 ? 's' : ''}  ·  ${totalObjs} objet${totalObjs !== 1 ? 's' : ''}`);
+  lines.unshift('');
+  lines.unshift(`Fichier : ${owFilePath || '(non sauvegardé)'}`);
+  document.getElementById('etatProjetContent').textContent = lines.join('\n');
+  const popup = document.getElementById('etatProjetPopup');
+  popup.style.display = 'block';
 }
 
 function owPermuter() {
@@ -1954,7 +2053,7 @@ function owGrpPlayCancel() {
   grpPlayEditId = null;
 }
 
-function owGrpPlayValidate() {
+async function owGrpPlayValidate() {
   if (grpPlayEditId === null) return;
   const grp = owGroups.find(g => g.id === grpPlayEditId);
   if (!grp) { owGrpPlayCancel(); return; }
@@ -1978,7 +2077,10 @@ function owGrpPlayValidate() {
     owApplyGrpStyle(div, grp);
     owComputeGrpObjets(grp);
     owDrawTransformOverlay(grp, div);
-    if (grp.transposition) owMiseANiveauAudio(grp).catch(e => console.error('[Audio]', e));
+    const status = document.getElementById('spFaustStatus');
+    if (status) status.textContent = `Mise à niveau : ${grp.name || grp.id}…`;
+    await owMiseANiveauComplete(grp);
+    if (status) status.textContent = `Mise à niveau : ${grp.name || grp.id} OK`;
   }
 }
 
@@ -2148,7 +2250,7 @@ function owComputeGrpObjets(grp) {
   }
   grp.owTableObjets = objs;
   owTableObjets[grp.id] = objs;
-  console.log('[owTableObjets] grp', grp.id, '(' + (grp.name||'') + ')', objs.map(o => (o.file||'?') + ' → ' + o.id + '.wav'));
+  console.log('[owTableObjets] grp', grp.id, '(' + (grp.name||'') + ')', objs.map(o => (o.file||'?') + ' → ' + (o._origId ?? o.id) + '.wav'));
   return objs;
 }
 
@@ -2209,6 +2311,312 @@ function owAudioBufferToWav(buf) {
   return ab;
 }
 
+// ─── Encodage WAV multi-canaux (N×Float32Array → ArrayBuffer) ─────────────────
+function owMultiChannelToWav(channels, sampleRate) {
+  const nCh = channels.length, len = channels[0].length;
+  const ab  = new ArrayBuffer(44 + len * nCh * 2);
+  const dv  = new DataView(ab);
+  const w   = (off, val, n) => { for (let i=0;i<n;i++) dv.setUint8(off+i,(val>>(i*8))&0xff); };
+  const ws  = (off, s)     => { for (let i=0;i<s.length;i++) dv.setUint8(off+i, s.charCodeAt(i)); };
+  ws(0,'RIFF'); w(4,ab.byteLength-8,4); ws(8,'WAVE'); ws(12,'fmt ');
+  w(16,16,4); w(20,1,2); w(22,nCh,2); w(24,sampleRate,4);
+  w(28,sampleRate*nCh*2,4); w(32,nCh*2,2); w(34,16,2);
+  ws(36,'data'); w(40,len*nCh*2,4);
+  let off = 44;
+  for (let i = 0; i < len; i++)
+    for (let c = 0; c < nCh; c++) {
+      const s = Math.max(-1, Math.min(1, channels[c][i]));
+      dv.setInt16(off, Math.round(s < 0 ? s*32768 : s*32767), true); off += 2;
+    }
+  return ab;
+}
+
+// ─── Export partition multicanal (toutes sections → WAV N canaux) ─────────────
+async function owExportMulticanal() {
+  owCloseMenus();
+  if (!owFilePath) { alert('Aucune partition chargée.'); return; }
+  const nCh   = window.owWamSpat?.P ?? 2;
+  const SR    = 48000;
+  const status = document.getElementById('spFaustStatus');
+  owSaveSectionCurves();  // flush owGainPoints/owTempoPoints → owGainBySection avant le parcours
+  const savedSec = owActiveSec;
+
+  if (status) status.textContent = 'Export multicanal : analyse…';
+  const clips = [];  // [{offsetSec, channels:Float32Array[], nFrames}]
+
+  for (const sec of [...owSections].sort((a, b) => a.posY - b.posY)) {
+    owLoadSectionCurves(sec.id);
+    const grps = owGroups.filter(g => g.sectionId === sec.id && g.owTableObjets?.length);
+    for (const grp of grps) {
+      const parsed = owParseGrpXml(grp.id);
+      if (!parsed) continue;
+      const { ctn } = parsed;
+      const sx0 = (grp._baseW !== undefined ? grp._baseW : grp.w) / ctn.ctnW;
+      for (const obj of grp.owTableObjets) {
+        const objPx     = grp.posX + (obj.posX - ctn.ctnX) * sx0;
+        const offsetSec = owScorePxToRealSec(0, objPx);
+        const objDurSec = obj.duree > 0 ? obj.duree : (obj.bkgWidth * sx0) / OW_BASE_PX;
+        const gainEnv   = grp.variationIntensite ? owExtractGainEnvelope(objPx, objDurSec) : null;
+        const fileId    = obj._origId ?? obj.id;
+        const filename  = fileId + '.wav';
+        if (status) status.textContent = `Export: lecture ${filename}…`;
+
+        let raw;
+        try { raw = await window.api.readAudioFile(owFilePath, 'interprete/' + filename); }
+        catch { try { raw = await window.api.readAudioFile(owFilePath, filename); } catch { continue; } }
+
+        let audioBuf;
+        try {
+          const ab = raw instanceof ArrayBuffer ? raw : (raw.buffer ?? new Uint8Array(raw).buffer);
+          audioBuf = owDecodeWavManual(ab);
+        } catch (e) { console.warn('[Export] décodage échoué:', filename, e); continue; }
+
+        const srcSR    = audioBuf.sampleRate;
+        const srcLen   = audioBuf.length;
+        const outFrames = Math.ceil(srcLen * SR / srcSR);
+
+        // Construire nCh canaux resampléstages → SR
+        const outChannels = [];
+        for (let c = 0; c < nCh; c++) {
+          const srcCh = c < audioBuf.numberOfChannels ? c : audioBuf.numberOfChannels - 1;
+          const src   = audioBuf.getChannelData(srcCh);
+          const out   = new Float32Array(outFrames);
+          if (srcSR === SR) {
+            out.set(src.subarray(0, Math.min(srcLen, outFrames)));
+          } else {
+            for (let i = 0; i < outFrames; i++) {
+              const pos = i * srcSR / SR;
+              const i0  = Math.floor(pos);
+              const fr  = pos - i0;
+              out[i]    = (i0 < srcLen ? src[i0] : 0) * (1 - fr) +
+                          (i0 + 1 < srcLen ? src[i0 + 1] : 0) * fr;
+            }
+          }
+          outChannels.push(out);
+        }
+
+        // Appliquer la variation de gain en temps réel (même logique que audio_server)
+        if (gainEnv && gainEnv.length >= 2) {
+          const fracs = gainEnv.map(p => p.frac);
+          const gains = gainEnv.map(p => p.v);
+          for (let c = 0; c < nCh; c++) {
+            for (let i = 0; i < outFrames; i++) {
+              const frac = outFrames > 1 ? i / (outFrames - 1) : 0;
+              let lo = 0, hi = fracs.length - 1;
+              while (lo < hi - 1) { const mid = (lo + hi) >> 1; if (fracs[mid] <= frac) lo = mid; else hi = mid; }
+              const t = fracs[hi] > fracs[lo] ? (frac - fracs[lo]) / (fracs[hi] - fracs[lo]) : 0;
+              outChannels[c][i] *= gains[lo] + (gains[hi] - gains[lo]) * t;
+            }
+          }
+        }
+        clips.push({ offsetSec, channels: outChannels, nFrames: outFrames });
+      }
+    }
+  }
+
+  owLoadSectionCurves(savedSec);
+
+  if (!clips.length) {
+    if (status) status.textContent = '';
+    alert('Aucun audio à exporter.');
+    return;
+  }
+
+  // Durée totale
+  let totalFrames = 0;
+  for (const cl of clips) totalFrames = Math.max(totalFrames, Math.round(cl.offsetSec * SR) + cl.nFrames);
+
+  if (status) status.textContent = `Export: mixage ${clips.length} clips, ${nCh} canaux…`;
+  const master = Array.from({length: nCh}, () => new Float32Array(totalFrames));
+  for (const cl of clips) {
+    const start = Math.round(cl.offsetSec * SR);
+    for (let c = 0; c < nCh; c++) {
+      const src = cl.channels[c];
+      for (let i = 0; i < cl.nFrames && start + i < totalFrames; i++) master[c][start + i] += src[i];
+    }
+  }
+
+  if (status) status.textContent = 'Export: encodage WAV…';
+  const wavAb = owMultiChannelToWav(master, SR);
+  const blob  = new Blob([wavAb], {type: 'audio/wav'});
+  const url   = URL.createObjectURL(blob);
+  const a     = document.createElement('a');
+  a.href = url;
+  a.download = (owFilePath || 'partition').split(/[/\\]/).pop().replace(/\.[^.]+$/, '') + '_multicanal.wav';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  if (status) status.textContent = `Export OK — ${nCh} ch · ${(totalFrames / SR).toFixed(1)} s`;
+}
+
+// Interpolation linéaire 1D sur un tableau (xs trié croissant)
+function owLerp1D(xs, ys, x) {
+  if (!xs.length) return 1;
+  if (x <= xs[0])       return ys[0];
+  if (x >= xs.at(-1))  return ys.at(-1);
+  for (let i = 1; i < xs.length; i++) {
+    if (x < xs[i]) {
+      const t = (x - xs[i-1]) / (xs[i] - xs[i-1]);
+      return ys[i-1] + t * (ys[i] - ys[i-1]);
+    }
+  }
+  return ys.at(-1);
+}
+
+// ─── Spatialisation Faust offline pour un objet (VBAP3D ou HOA) ──────────────
+async function owSpatialiserObjet(obj, filename) {
+  if (!window.owWamSpat) return false;
+
+  // Lire depuis interprete/ (après transposition/gain/tempo)
+  const raw = await window.api.readAudioFile(owFilePath, 'interprete/' + filename);
+  if (!raw) return false;
+
+  let audioBuf;
+  try {
+    const ctx = new AudioContext();
+    audioBuf  = await ctx.decodeAudioData(new Uint8Array(raw).buffer.slice(0));
+    await ctx.close();
+  } catch(e) {
+    try { audioBuf = owDecodeWavManual(new Uint8Array(raw).buffer); }
+    catch(e2) { return false; }
+  }
+
+  const numSamples = audioBuf.length;
+  const sampleRate = audioBuf.sampleRate;
+  const P          = window.owWamSpat.P;
+  const blockSize  = 64;
+
+  // Mix vers mono (canal 0, ou moyenne si stéréo)
+  const mono = new Float32Array(numSamples);
+  for (let c = 0; c < audioBuf.numberOfChannels; c++) {
+    const ch = audioBuf.getChannelData(c);
+    for (let i = 0; i < numSamples; i++) mono[i] += ch[i];
+  }
+  if (audioBuf.numberOfChannels > 1)
+    for (let i = 0; i < numSamples; i++) mono[i] /= audioBuf.numberOfChannels;
+
+  // Processeur Faust offline
+  const processor  = await window.owWamSpat.createOfflineProcessor(sampleRate, blockSize);
+  const faustParms = processor.getParams();
+  const findP = pfx => faustParms.find(p => new RegExp(`^/?${pfx}\\d*`,'i').test(p))
+                    || faustParms.find(p => p.toLowerCase().includes(pfx.toLowerCase())) || null;
+  const paramX = findP('X'), paramY = findP('Y'), paramZ = findP('Z');
+  const paramD = faustParms.find(p => /dt|dist|cdistance/i.test(p)) || null;
+
+  const spT = obj.spt?.length ? obj.spt : [0];
+  const spX = obj.spx?.length ? obj.spx : [0];
+  const spY = obj.spy?.length ? obj.spy : [0];
+  const spZ = obj.spz?.length ? obj.spz : [0];
+  const spD = obj.spd?.length ? obj.spd : [1];
+  const durSec   = numSamples / sampleRate;
+  const spTimes  = spT.map(t => t * durSec);
+
+  const processedCh = Array.from({length: P}, () => new Float32Array(numSamples));
+
+  for (let offset = 0; offset < numSamples; offset += blockSize) {
+    const len = Math.min(blockSize, numSamples - offset);
+    for (let i = 0; i < len; i++) {
+      const t = (offset + i) / sampleRate;
+      if (paramX) processor.setParamValue(paramX, owLerp1D(spTimes, spX, t));
+      if (paramY) processor.setParamValue(paramY, owLerp1D(spTimes, spY, t));
+      if (paramZ) processor.setParamValue(paramZ, owLerp1D(spTimes, spZ, t));
+      if (paramD) processor.setParamValue(paramD, owLerp1D(spTimes, spD, t));
+    }
+    const out = processor.render([mono.subarray(offset, offset + len)], len);
+    for (let c = 0; c < P; c++) processedCh[c].set(out[c], offset);
+  }
+
+
+  const wavData = owMultiChannelToWav(processedCh, sampleRate);
+  await window.api.saveAudioFile(owFilePath, 'interprete', filename, wavData);
+  return true;
+}
+
+// ─── Pipeline complet : transposition → gain → tempo → spatialisation ─────────
+async function owMiseANiveauComplete(grp) {
+  if (!owFilePath || !window.api?.readAudioFile) return;
+  const parsed = owParseGrpXml(grp.id);
+  if (!parsed) return;
+  const { ctn } = parsed;
+  const origObjs = parsed.audio;
+  const newObjs  = grp.owTableObjets;
+  if (!newObjs?.length) return;
+
+  const SPACE_H = 3000;
+  const sx0     = (grp._baseW ?? grp.w) / ctn.ctnW;
+  const status  = document.getElementById('spFaustStatus');
+  let count = 0;
+
+  for (const newObj of newObjs) {
+    const origObj = origObjs.find(o => o.id === (newObj._origId ?? newObj.id));
+    if (!origObj) continue;
+    const filename = origObj.id + '.wav';
+    if (status) status.textContent = `Traitement ${filename}…`;
+
+    // 1. Transposition (les WAV de Audios/ sont déjà finalisés par kandiskyscore)
+    const objScorePx = grp.posX + (origObj.posX - ctn.ctnX) * sx0;
+    let transpFactor = 1;
+    if (grp.transposition && origObj.flagTranspo !== 0) {
+      const origRef = owPitchRef(origObj);
+      const newRef  = owPitchRef(newObj);
+      const oF = (SPACE_H - origRef) / (SPACE_H / 2);
+      const nF = (SPACE_H - newRef)  / (SPACE_H / 2);
+      if (oF > 0 && nF > 0) transpFactor = nF / oF;
+    }
+
+    if (Math.abs(transpFactor - 1) > 1e-4) {
+      const raw = await window.api.readAudioFile(owFilePath, filename);
+      if (!raw) { console.warn('[MAJ] introuvable :', filename); continue; }
+      let audioBuf;
+      try {
+        const ctx = new AudioContext();
+        audioBuf  = await ctx.decodeAudioData(new Uint8Array(raw).buffer.slice(0));
+        await ctx.close();
+      } catch(e) {
+        try { audioBuf = owDecodeWavManual(new Uint8Array(raw).buffer); }
+        catch(e2) { console.warn('[MAJ] décodage transpo échoué :', filename); continue; }
+      }
+      const sr = audioBuf.sampleRate, nCh = audioBuf.numberOfChannels;
+      const srcLen = audioBuf.length;
+      const newLen = Math.max(1, Math.round(srcLen / transpFactor));
+      const offCtx = new OfflineAudioContext(nCh, newLen, sr);
+      const srcNode = offCtx.createBufferSource();
+      srcNode.buffer = audioBuf;
+      srcNode.playbackRate.value = transpFactor;
+      srcNode.connect(offCtx.destination);
+      srcNode.start(0);
+      const rendered = await offCtx.startRendering();
+      const wavData  = owAudioBufferToWav(rendered);
+      await window.api.saveAudioFile(owFilePath, 'interprete', filename, wavData);
+    } else {
+      // Pas de transposition : copier le fichier original tel quel dans interprete/
+      const raw = await window.api.readAudioFile(owFilePath, filename);
+      if (!raw) { console.warn('[MAJ] introuvable :', filename); continue; }
+      await window.api.saveAudioFile(owFilePath, 'interprete', filename, new Uint8Array(raw).buffer);
+    }
+    count++;
+
+    // 2. Tempo (Rubberband CLI)
+    if (grp.variationTempo && origObj.duree) {
+      const map = owBuildTempoMapForNote(objScorePx, origObj.duree);
+      const ys  = map.map(p => p.y);
+      const flat = Math.max(...ys) - Math.min(...ys) < 0.001 && Math.abs(ys[0] - 1) < 0.001;
+      if (!flat)
+        await window.api.processTempoNote({
+          partitionPath: owFilePath, fileId: origObj.id,
+          tempoMap: map, duree: origObj.duree
+        });
+    }
+
+    // 3. Spatialisation (Faust offline)
+    if (window.owWamSpat) await owSpatialiserObjet(origObj, filename);
+  }
+
+  if (status) status.textContent = `Mise à niveau : ${count} fichier(s) traité(s)`;
+  console.log(`[MAJ] ${count} fichier(s) traité(s)`);
+}
+
 // ─── Mise à niveau audio : transposition selon le nouveau posY ───────────────
 async function owMiseANiveauAudio(grp) {
   if (!grp.transposition) return;
@@ -2225,7 +2633,7 @@ async function owMiseANiveauAudio(grp) {
 
   let count = 0;
   for (const newObj of newObjs) {
-    const origObj = origObjs.find(o => o.id === newObj.id);
+    const origObj = origObjs.find(o => o.id === (newObj._origId ?? newObj.id));
     if (!origObj) continue;
     if (origObj.flagTranspo === 0) continue;
 
@@ -2390,6 +2798,18 @@ function parseObjetEl(el) {
     file:       v('file',''),
     flagTranspo:vi('flagtranspo', 1),
     basePosY:   vf('baseposy'),
+    duree:      vf('duree', 0),
+    gain:    vf('gain', 1),
+    debut:   vf('debut', 0),
+    fin:     vf('fin', 1),
+    fadein:  v('fadein', 'l'),
+    fadeout: v('fadeout', 'l'),
+    envx:  v('envx','0.01,0.8').split(',').map(Number).filter(n => !isNaN(n)),
+    spx:   v('spx','0').split(',').map(Number).filter(n => !isNaN(n)),
+    spy:   v('spy','0').split(',').map(Number).filter(n => !isNaN(n)),
+    spz:   v('spz','0').split(',').map(Number).filter(n => !isNaN(n)),
+    spt:   v('spt','0').split(',').map(Number).filter(n => !isNaN(n)),
+    spd:   v('spd','1').split(',').map(Number).filter(n => !isNaN(n)),
   };
 }
 
@@ -3040,8 +3460,122 @@ function owDrawGain() {
 function owTempoPointTitle(x, y) {
   return 't=' + (x / OW_BASE_PX).toFixed(2) + 's  bpm=' + (240 - y / 0.4167).toFixed(1);
 }
+
+// ─── Interpolation et intégration du tempo ──────────────────────────────────
+function owTempoAtPx(scorePx) {
+  const pts = [...owTempoPoints].sort((a, b) => a.X - b.X);
+  if (!pts.length) return 1.0;
+  const bpmOf = p => 240 - p.Y / 0.4167;
+  if (scorePx <= pts[0].X) return bpmOf(pts[0]) / 60;
+  const last = pts.at(-1);
+  if (scorePx >= last.X)   return bpmOf(last) / 60;
+  for (let i = 1; i < pts.length; i++) {
+    if (scorePx < pts[i].X) {
+      const a = pts[i-1], b = pts[i];
+      const t = (scorePx - a.X) / (b.X - a.X);
+      return (bpmOf(a) + t * (bpmOf(b) - bpmOf(a))) / 60;
+    }
+  }
+  return bpmOf(last) / 60;
+}
+
+// Intègre 1/(tempo × OW_BASE_PX) sur [fromPx, toPx] → secondes réelles
+function owScorePxToRealSec(fromPx, toPx) {
+  if (toPx <= fromPx) return 0;
+  const n    = Math.max(10, Math.round((toPx - fromPx) / 5));
+  const step = (toPx - fromPx) / n;
+  let t = 0;
+  for (let i = 0; i < n; i++)
+    t += step / (owTempoAtPx(fromPx + (i + 0.5) * step) * OW_BASE_PX);
+  return t;
+}
+
+// Construit le tempoMap pour une note (tableau {x, y} pour rubberband timeMap)
+// x = secondes depuis le début de la note (au tempo de base), y = BPS
+function owBuildTempoMapForNote(noteStartPx, noteDurationSec) {
+  const noteEndPx = noteStartPx + noteDurationSec * OW_BASE_PX;
+  const result    = [{x: 0, y: owTempoAtPx(noteStartPx)}];
+  for (const p of [...owTempoPoints].sort((a, b) => a.X - b.X)) {
+    if (p.X > noteStartPx && p.X < noteEndPx)
+      result.push({x: (p.X - noteStartPx) / OW_BASE_PX, y: (240 - p.Y / 0.4167) / 60});
+  }
+  result.push({x: noteDurationSec, y: owTempoAtPx(noteEndPx)});
+  return result;
+}
+
+// Pré-traitement rubberband pour les groupes variationTempo
+async function owApplyRubberbandTempo(grp) {
+  if (!grp.variationTempo || !owFilePath) return;
+  if (!window.api?.processTempoNote)      return;
+  const parsed = owParseGrpXml(grp.id);
+  if (!parsed) return;
+  const { ctn } = parsed;
+  const sx0    = (grp._baseW !== undefined ? grp._baseW : grp.w) / ctn.ctnW;
+  const status = document.getElementById('spFaustStatus');
+  if (status) status.textContent = 'Tempo rubberband…';
+  let count = 0;
+  for (const obj of grp.owTableObjets) {
+    if (!obj.duree) continue;
+    const fileId  = obj._origId ?? obj.id;
+    const objPx   = grp.posX + (obj.posX - ctn.ctnX) * sx0;
+    const map     = owBuildTempoMapForNote(objPx, obj.duree);
+    // Inutile si tempo constant et unitaire
+    const ys      = map.map(p => p.y);
+    if (Math.max(...ys) - Math.min(...ys) < 0.001 && Math.abs(ys[0] - 1) < 0.001) continue;
+    const ok = await window.api.processTempoNote({partitionPath: owFilePath, fileId, tempoMap: map, duree: obj.duree});
+    if (ok) count++;
+  }
+  if (status) status.textContent = `Tempo : ${count} fichier(s) → Audios/interprete/`;
+}
 function owGainPointTitle(x, y) {
   return 't=' + (x / OW_BASE_PX).toFixed(2) + 's  gain=' + ((100 - y) * 0.05).toFixed(2);
+}
+
+// Extrait l'enveloppe de gain pour un objet depuis owGainPoints (même logique que KS3).
+// Retourne [{frac:0..1, v:gainValue}] ou null si inutile (gain plat à 1.0).
+function owExtractGainEnvelope(objScorePx, objDurationSec) {
+  if (!objDurationSec) return null;
+  const pts = [...owGainPoints].sort((a, b) => a.X - b.X);
+  if (!pts.length) return null;
+
+  const objWidthPx = objDurationSec * OW_BASE_PX;
+  const objEndPx   = objScorePx + objWidthPx;
+  function lerp(a, b, t) { return a + (b - a) * t; }
+
+  // Étend la courbe à plat hors des bornes (comme KS3)
+  const ext = [{X: -Infinity, Y: pts[0].Y}, ...pts, {X: Infinity, Y: pts.at(-1).Y}];
+
+  let result = [];
+  for (let i = 0; i < ext.length - 1; i++) {
+    const p1 = ext[i], p2 = ext[i + 1];
+    if (p2.X <= objScorePx || p1.X >= objEndPx) continue;
+    if (p1.X <= objScorePx && p2.X >= objScorePx) {
+      const t = (p2.X - p1.X) ? (objScorePx - p1.X) / (p2.X - p1.X) : 0;
+      result.push({X: objScorePx, Y: lerp(p1.Y, p2.Y, t)});
+    }
+    if (p1.X > objScorePx && p1.X < objEndPx) result.push({X: p1.X, Y: p1.Y});
+  }
+  // Point de sortie
+  for (let i = 0; i < ext.length - 1; i++) {
+    const p1 = ext[i], p2 = ext[i + 1];
+    if (p1.X <= objEndPx && p2.X >= objEndPx) {
+      const t = (p2.X - p1.X) ? (objEndPx - p1.X) / (p2.X - p1.X) : 0;
+      result.push({X: objEndPx, Y: lerp(p1.Y, p2.Y, t)});
+      break;
+    }
+  }
+
+  if (!result.length) return null;
+
+  // Convertit en fractions 0..1 (audio_server mappe sur les frames réelles)
+  const env = result.map(p => ({
+    frac: objWidthPx > 0 ? (p.X - objScorePx) / objWidthPx : 0,
+    v:    (100 - p.Y) * 0.05
+  }));
+
+  // Inutile si l'enveloppe est déjà plate à 1.0
+  const flat = env.every(p => Math.abs(p.v - 1.0) < 0.001);
+  return flat ? null : env;
 }
 
 function owCreatePointEl(id, x, y, color, arr, drawFn, titleFn) {
@@ -3087,6 +3621,7 @@ function owDragPoint(el, id, arr, drawFn, titleFn, startEvt) {
   document.onmouseup = function() {
     document.onmousemove = null;
     document.onmouseup   = null;
+    owRedrawReglette();
     owSetModified(true);
   };
 }
@@ -3097,6 +3632,7 @@ function owInsertTempoPoint(x, y) {
   owTempoPoints.sort((a, b) => a.X - b.X);
   owCreatePointEl(id, x, y, 'green', owTempoPoints, owDrawTempo, owTempoPointTitle);
   owDrawTempo();
+  owRedrawReglette();
   owSetModified(true);
 }
 function owInsertGainPoint(x, y) {
@@ -3148,6 +3684,7 @@ function owRebuildTempoPoints() {
   owGainPoints.forEach(p  => owCreatePointEl(p.id, p.X, p.Y, '#c33',  owGainPoints,  owDrawGain,  owGainPointTitle));
   owDrawTempo();
   owDrawGain();
+  owRedrawReglette();
 }
 
 document.getElementById('owBarClickArea').addEventListener('click', function(e) {
@@ -3191,17 +3728,21 @@ if (typeof window.api !== 'undefined') {
     const cmd  = sep > -1 ? data.substring(0, sep) : data;
     const rest = sep > -1 ? data.substring(sep + 1) : '';
     switch (cmd) {
-      case 'owSaved':
+      case 'owSaved': {
         owFilePath = rest;
+        owIsOriginalFile = false;   // après un SaveAs réussi, le fichier n'est plus l'original
         owSetModified(false);
-        document.getElementById('owFileLabel').textContent = rest.split(/[\\/]/).at(-1);
+        const st = document.getElementById('spFaustStatus');
+        if (st) { st.textContent = 'Sauvegardé : ' + rest.split(/[\\/]/).at(-1); setTimeout(() => { if (st.textContent.startsWith('Sauvegardé')) st.textContent = ''; }, 3000); }
         break;
+      }
       case 'owLoaded': {
         const nl   = rest.indexOf('\n');
         const fp   = nl > -1 ? rest.substring(0, nl) : '';
         const xml  = nl > -1 ? rest.substring(nl + 1) : rest;
         owFilePath  = fp;
-        owImagesDir = fp ? fp.replace(/[/\\][^/\\]*$/, '') + '/Images' : '';
+        owSrcDir    = fp ? fp.replace(/[/\\][^/\\]*$/, '') : '';
+        owImagesDir = owSrcDir ? owSrcDir + '/Images' : '';
         owNextObjGlobalId = 0;
         owParseData(xml, fp.split(/[\\/]/).at(-1) || 'partition.xml');
         break;
@@ -3242,7 +3783,7 @@ if (typeof window.api !== 'undefined') {
 // ═══════════════════════════════════════════════
 // Affiche la position temporelle correspondant à posX (pixels scroll)
 function owSetCompteur(posX) {
-  const sec  = posX / (OW_BASE_PX * owZoomScale);
+  const sec  = owScorePxToRealSec(0, posX / owZoomScale);
   const h    = Math.floor(sec / 3600);
   const m    = Math.floor((sec % 3600) / 60);
   const s    = Math.floor(sec % 60);
@@ -3431,7 +3972,9 @@ async function owStartAudio() {
 
   owStopAudio();
 
-  const barTime = owBarVertTime;
+  const bar        = document.getElementById('owBarVerticale');
+  const barScreenPx = parseFloat(bar.style.left) || 0;
+  const barScorePx  = barScreenPx / owZoomScale;
   const t0 = Date.now();
   let count = 0;
 
@@ -3444,20 +3987,31 @@ async function owStartAudio() {
     const sx0 = (grp._baseW !== undefined ? grp._baseW : grp.w) / ctn.ctnW;
 
     for (const obj of grp.owTableObjets) {
-      const objPx   = grp.posX + (obj.posX - ctn.ctnX) * sx0;
-      const objTime = objPx / OW_BASE_PX;
-      const delay   = objTime - barTime;
+      const objPx  = grp.posX + (obj.posX - ctn.ctnX) * sx0;
+      const delay  = owScorePxToRealSec(barScorePx, objPx);
       if (delay < -0.05) continue;
 
-      const filename = obj.id + '.wav';
+      const fileId   = obj._origId ?? obj.id;
+      const filename = fileId + '.wav';
       const absPath  = await window.api?.resolveAudioPath?.(owFilePath, filename);
       if (!absPath) continue;
 
+      // interprete/ : transposition/tempo/spatialisation déjà appliqués
+      // gain_env (variationIntensite) appliqué en temps réel ; obj.gain déjà dans le WAV
+      const processed  = absPath.includes('/interprete/') || absPath.includes('\\interprete\\');
+      const tempoRatio = (!processed && grp.variationTempo) ? owTempoAtPx(objPx) : 1.0;
+      const objDurSec  = obj.duree > 0 ? obj.duree : (obj.bkgWidth * sx0) / OW_BASE_PX;
+      const gainEnv    = grp.variationIntensite
+        ? owExtractGainEnvelope(objPx, objDurSec) : null;
       const waitMs = Math.max(0, Math.round(delay * 1000) - (Date.now() - t0));
       const vid    = String(obj.id);
-      const fp     = absPath;
       _owPendingVoices++;
-      _owPlayTimers.push(setTimeout(() => owAudioSend({ cmd: 'play', id: vid, file: fp, notify_end: true }), waitMs));
+      _owPlayTimers.push(setTimeout(() => owAudioSend({
+        cmd: 'play', id: vid, file: absPath,
+        ...(Math.abs(tempoRatio - 1) > 1e-4  ? { tempo_ratio: tempoRatio } : {}),
+        ...(gainEnv                           ? { gain_env: gainEnv }     : {}),
+        notify_end: true
+      }), waitMs));
       count++;
     }
   }
@@ -3480,21 +4034,33 @@ function readPart() {
   owStartAudio().catch(e => console.error('[Lecture audio]', e));
   const frameMs = 50;
   owPlayTimer = setInterval(() => {
-    const bar = document.getElementById('owBarVerticale');
-    const cur = parseFloat(bar.style.left) || 0;
-    owMoveBarTo(cur + OW_BASE_PX * owZoomScale * frameMs / 1000);
+    const bar       = document.getElementById('owBarVerticale');
+    const curScreen = parseFloat(bar.style.left) || 0;
+    const curScore  = curScreen / owZoomScale;
+    const bps       = owTempoAtPx(curScore);
+    owMoveBarTo(curScreen + OW_BASE_PX * bps * owZoomScale * frameMs / 1000);
   }, frameMs);
 }
 
-function owRefreshAll() {
+async function owRefreshAll() {
   if (owActiveSec === null) return;
-  owGroups.filter(g => g.sectionId === owActiveSec).forEach(grp => {
+  const grps = owGroups.filter(g => g.sectionId === owActiveSec);
+  const status = document.getElementById('spFaustStatus');
+
+  for (const grp of grps) {
     const div = document.getElementById('grp' + grp.id);
-    if (!div) return;
-    const d = interpGrpData[grp.id];
-    if (d) drawObjets(d.xml, div, d.imgBase);
-    if (grp.owTableObjets?.length) owDrawTransformOverlay(grp, div);
-  });
+    if (div) {
+      const d = interpGrpData[grp.id];
+      if (d) drawObjets(d.xml, div, d.imgBase);
+      owComputeGrpObjets(grp);
+      owDrawTransformOverlay(grp, div);
+    }
+    if (grp.owTableObjets?.length) {
+      if (status) status.textContent = `Refresh : groupe ${grp.name || grp.id}…`;
+      await owMiseANiveauComplete(grp);
+    }
+  }
+  if (status) status.textContent = `Refresh : ${grps.length} groupe(s) traité(s)`;
 }
 
 // La connexion WebSocket démarre quand main.js envoie audioServerReady;PORT
@@ -3533,6 +4099,13 @@ function owUpdateWorkspace() {
 owUpdateWorkspace();
 window.addEventListener('resize', owUpdateWorkspace);
 
+document.addEventListener('keydown', function(e) {
+  if (e.ctrlKey && e.key === 's') {
+    e.preventDefault();
+    if (e.shiftKey) owSauvegarderSous(); else owSauvegarder();
+  }
+});
+
 // ═══════════════════════════════════════════════
 //  RÉGLETTES + ZOOM
 // ═══════════════════════════════════════════════
@@ -3565,17 +4138,18 @@ function owCreateReglette() {
   sep.setAttribute('stroke', '#aaa'); sep.setAttribute('stroke-width', '0.5');
   svg.appendChild(sep);
 
-  // ── Réglette temporelle (zone 0→25px) ─────────
-  const step = OW_BASE_PX * scale;   // px par seconde
+  // ── Réglette temporelle (zone 0→25px) — s'adapte au tempo ─────────
+  // Même principe que kandiskyscore3 : step = OW_BASE_PX*scale/bps (1 seconde réelle)
+  let p = 0;
   let tickCount = 0;
-  for (let p = 0; p < nbmax; p += step, tickCount++) {
+  while (p < nbmax) {
+    const bps     = owTempoAtPx(p / scale);
     const isMajor = (tickCount % 10 === 0);
-    const line = document.createElementNS(OW_SVG, 'line');
+    const line    = document.createElementNS(OW_SVG, 'line');
     line.setAttribute('x1', p); line.setAttribute('y1', 0);
     line.setAttribute('x2', p); line.setAttribute('y2', isMajor ? 20 : 11);
     line.setAttribute('stroke', '#444'); line.setAttribute('stroke-width', 1);
     svg.appendChild(line);
-
     if (isMajor && tickCount > 0) {
       const txt = document.createElementNS(OW_SVG, 'text');
       txt.setAttribute('x', p + 2); txt.setAttribute('y', 20);
@@ -3583,6 +4157,10 @@ function owCreateReglette() {
       txt.textContent = tickCount + 's';
       svg.appendChild(txt);
     }
+    const step = OW_BASE_PX * scale / Math.max(bps, 0.01);
+    if (step < 0.5) break;
+    p += step;
+    tickCount++;
   }
 
   // ── Réglette de mesures (zone 25→50px) ────────

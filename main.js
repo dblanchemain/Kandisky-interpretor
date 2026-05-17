@@ -212,6 +212,95 @@ function findBundledBin(name) {
   return fs.existsSync(bin) ? bin : null;
 }
 
+// ── Rubberband CLI (time-stretch avec timeMap) ────────────────────────────────
+function buildSmoothRubberbandTimeMap(tempoCurve, sampleRate, durationSec, totalInFrames, stepSec = 0.1) {
+  const lines = ['0 0'];
+  let outTime = 0;
+  const tempoAt = x => {
+    for (let i = 1; i < tempoCurve.length; i++) {
+      const a = tempoCurve[i-1], b = tempoCurve[i];
+      if (x <= a.x) return a.y;
+      if (x <  b.x) return a.y + (b.y - a.y) * (x - a.x) / (b.x - a.x);
+    }
+    return tempoCurve.at(-1).y;
+  };
+  for (let t = stepSec; t <= durationSec; t += stepSec) {
+    const y       = Math.max(tempoAt(t), 1e-4);
+    outTime      += stepSec / y;
+    const inFrame  = Math.round(t * sampleRate);
+    const outFrame = Math.round(outTime * sampleRate);
+    if (inFrame > totalInFrames) break;
+    lines.push(`${inFrame} ${outFrame}`);
+  }
+  const lastIn = parseInt(lines.at(-1).split(' ')[0]);
+  if (lastIn < totalInFrames) {
+    const remaining = (totalInFrames - lastIn) / sampleRate;
+    const finalOut  = outTime + remaining / Math.max(tempoAt(durationSec), 1e-4);
+    lines.push(`${totalInFrames} ${Math.round(finalOut * sampleRate)}`);
+  }
+  return lines.join('\n');
+}
+
+function readWavInfo(filePath) {
+  try {
+    const buf = Buffer.alloc(44);
+    const fd  = fs.openSync(filePath, 'r');
+    fs.readSync(fd, buf, 0, 44, 0);
+    fs.closeSync(fd);
+    const sampleRate    = buf.readUInt32LE(24);
+    const channels      = buf.readUInt16LE(22);
+    const bitsPerSample = buf.readUInt16LE(34);
+    const dataSize      = buf.readUInt32LE(40);
+    const frames        = Math.floor(dataSize / (channels * (bitsPerSample / 8)));
+    return { sampleRate, frames, channels };
+  } catch(e) { return null; }
+}
+
+async function callRubberbandCLI(inputPath, outputPath, timeRatio, pitchSemitones, timeMapPath) {
+  const rb  = findBundledBin('rubberband') || 'rubberband';
+  const args = [
+    '-t', String(timeRatio), '-p', String(pitchSemitones),
+    '--window-long', '--no-transients', '--smoothing', '--no-threads',
+  ];
+  if (timeMapPath) args.push('-M', timeMapPath);
+  args.push(inputPath, outputPath);
+
+  return new Promise((resolve, reject) => {
+    const proc = spawn(rb, args, { windowsHide: true });
+    proc.on('error', reject);
+    proc.on('close', code => code === 0 ? resolve() : reject(new Error('rubberband exit ' + code)));
+  });
+}
+
+ipcMain.handle('processTempoNote', async (_, { partitionPath, fileId, tempoMap, duree }) => {
+  if (!partitionPath || !fileId || !tempoMap?.length) return false;
+  const audiosDir  = path.join(path.dirname(partitionPath), 'Audios');
+  const interpDir  = path.join(audiosDir, 'interprete');
+  const filename   = fileId + '.wav';
+  const inputPath  = fs.existsSync(path.join(interpDir, filename))
+    ? path.join(interpDir, filename)
+    : path.join(audiosDir, filename);
+  if (!fs.existsSync(inputPath)) return false;
+  const info = readWavInfo(inputPath);
+  if (!info) return false;
+
+  fs.mkdirSync(interpDir, { recursive: true });
+  const tmPath  = path.join(app.getPath('userData'), `timemap_${fileId}.txt`);
+  const outPath = path.join(interpDir, filename);
+  const timemap = buildSmoothRubberbandTimeMap(tempoMap, info.sampleRate, duree, info.frames);
+  fs.writeFileSync(tmPath, timemap, 'utf-8');
+
+  try {
+    await callRubberbandCLI(inputPath, outPath, 1.0, 0, tmPath);
+    return true;
+  } catch(e) {
+    console.error('[Tempo] rubberband:', e.message);
+    return false;
+  } finally {
+    try { fs.unlinkSync(tmPath); } catch(_) {}
+  }
+});
+
 // ── Serveur audio Python (audio_server.py) ────────────────────────────────────
 let audioServerProc = null;
 
@@ -313,20 +402,23 @@ ipcMain.on('toMain', (event, args) => {
     case 'interpLoadGrp': {
       const p1      = rest.indexOf(';');
       const p2      = p1 > -1 ? rest.indexOf(';', p1 + 1) : -1;
+      const p3      = p2 > -1 ? rest.indexOf(';', p2 + 1) : -1;
       const grpId   = p1 > -1 ? rest.substring(0, p1) : rest;
       const grpName = p1 > -1 ? (p2 > -1 ? rest.substring(p1 + 1, p2) : rest.substring(p1 + 1)) : '';
-      const grpDir  = p2 > -1 ? rest.substring(p2 + 1) : '';
+      const grpDir  = p2 > -1 ? (p3 > -1 ? rest.substring(p2 + 1, p3) : rest.substring(p2 + 1)) : '';
+      const srcDir  = p3 > -1 ? rest.substring(p3 + 1) : '';
       if (!grpName) break;
       const candidates = [];
       if (grpDir) candidates.push(path.join(grpDir, grpName));
-      if (interpCurrentDir) candidates.push(path.join(interpCurrentDir, 'Groupes', grpName));
-      let xmlFound = null;
+      if (srcDir) candidates.push(path.join(srcDir, 'Groupes', grpName));
+      if (interpCurrentDir && interpCurrentDir !== srcDir) candidates.push(path.join(interpCurrentDir, 'Groupes', grpName));
+      let xmlFound = null, foundDir = '';
       for (const f of candidates) {
-        try { xmlFound = fs.readFileSync(f, 'utf-8'); break; }
+        try { xmlFound = fs.readFileSync(f, 'utf-8'); foundDir = path.dirname(path.dirname(f)); break; }
         catch(e) {}
       }
       if (!xmlFound) break;
-      const imgDir = interpCurrentDir ? path.join(interpCurrentDir, 'Images') : (grpDir || '');
+      const imgDir = foundDir ? path.join(foundDir, 'Images') : (interpCurrentDir ? path.join(interpCurrentDir, 'Images') : '');
       const b64 = Buffer.from(xmlFound, 'utf-8').toString('base64');
       win.webContents.send('fromMain', 'interpGrpLoaded;' + grpId + ';' + imgDir + ';' + b64);
       break;
