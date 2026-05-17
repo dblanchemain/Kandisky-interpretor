@@ -155,7 +155,7 @@ function createWindow() {
     }
   });
   win.loadFile('index.html');
-  if (!app.isPackaged) win.webContents.openDevTools();
+  if (!__dirname.includes('app.asar') && !app.isPackaged) win.webContents.openDevTools();
   win.removeMenu();
   win.on('closed', () => { win = null; });
 }
