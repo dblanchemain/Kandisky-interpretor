@@ -1954,7 +1954,7 @@ function owGrpPlayCancel() {
   grpPlayEditId = null;
 }
 
-function owGrpPlayValidate() {
+async function owGrpPlayValidate() {
   if (grpPlayEditId === null) return;
   const grp = owGroups.find(g => g.id === grpPlayEditId);
   if (!grp) { owGrpPlayCancel(); return; }
@@ -1978,7 +1978,10 @@ function owGrpPlayValidate() {
     owApplyGrpStyle(div, grp);
     owComputeGrpObjets(grp);
     owDrawTransformOverlay(grp, div);
-    owMiseANiveauComplete(grp).catch(e => console.error('[Mise à niveau]', e));
+    const status = document.getElementById('spFaustStatus');
+    if (status) status.textContent = `Mise à niveau : ${grp.name || grp.id}…`;
+    await owMiseANiveauComplete(grp);
+    if (status) status.textContent = `Mise à niveau : ${grp.name || grp.id} OK`;
   }
 }
 
@@ -2244,7 +2247,7 @@ function owLerp1D(xs, ys, x) {
 }
 
 // ─── Spatialisation Faust offline pour un objet (VBAP3D ou HOA) ──────────────
-async function owSpatialiserObjet(obj, filename, gainArr) {
+async function owSpatialiserObjet(obj, filename) {
   if (!window.owWamSpat) return false;
 
   // Lire depuis interprete/ (après transposition/gain/tempo)
@@ -2306,14 +2309,6 @@ async function owSpatialiserObjet(obj, filename, gainArr) {
     for (let c = 0; c < P; c++) processedCh[c].set(out[c], offset);
   }
 
-  // Appliquer l'enveloppe de gain sur tous les canaux spatialisés
-  console.log(`[SPAT GAIN] ${filename} gainArr.length=${gainArr?.length} numSamples=${numSamples} P=${P} gainArr[0]=${gainArr?.[0]?.toFixed(3)} gainArr[last]=${gainArr?.[gainArr.length-1]?.toFixed(3)} processedCh[0] rms avant=${Math.sqrt(processedCh[0].reduce((s,v)=>s+v*v,0)/numSamples).toFixed(4)}`);
-  if (gainArr?.length) {
-    const nGain = Math.min(gainArr.length, numSamples);
-    for (let c = 0; c < P; c++)
-      for (let i = 0; i < nGain; i++) processedCh[c][i] *= gainArr[i];
-  }
-  console.log(`[SPAT GAIN] processedCh[0] rms après=${Math.sqrt(processedCh[0].reduce((s,v)=>s+v*v,0)/numSamples).toFixed(4)}`);
 
   const wavData = owMultiChannelToWav(processedCh, sampleRate);
   await window.api.saveAudioFile(owFilePath, 'interprete', filename, wavData);
@@ -2339,7 +2334,6 @@ async function owMiseANiveauComplete(grp) {
     const origObj = origObjs.find(o => o.id === (newObj._origId ?? newObj.id));
     if (!origObj) continue;
     const filename = origObj.id + '.wav';
-    console.log(`[MAJ DBG] ${filename} origObj.gain=${origObj.gain} newObj.gain=${newObj.gain}`);
     if (status) status.textContent = `Traitement ${filename}…`;
 
     // 1. Lecture source originale (Audios/)
@@ -2387,34 +2381,23 @@ async function owMiseANiveauComplete(grp) {
     srcNode.start(0);
     const rendered = await offCtx.startRendering();
 
-    // 4. Enveloppe + fades (le gain scalaire est appliqué au moment de la lecture via vol)
-    const scalarGain  = 1;
+    // 4. Fades uniquement (courbe de gain appliquée en temps réel à la lecture via gain_env)
     const objScorePx  = grp.posX + (origObj.posX - ctn.ctnX) * sx0;
-    const durSec      = origObj.duree > 0 ? origObj.duree : rendered.length / rendered.sampleRate;
-    const gainEnv     = owExtractGainEnvelope(objScorePx, durSec);
-    console.log(`[MAJ GAIN] ${filename} objScorePx=${objScorePx.toFixed(1)} durSec=${durSec.toFixed(2)} owGainPoints=${JSON.stringify(owGainPoints)} gainEnv=${JSON.stringify(gainEnv)}`);
     const envx        = origObj.envx?.length >= 2 ? origObj.envx : [0, 1];
     const fadeInFrac  = envx[0] || 0;
     const fadeOutFrac = 1 - (envx[1] ?? 1);
-    const gainFracs   = gainEnv ? gainEnv.map(p => p.frac) : [];
-    const gainVals    = gainEnv ? gainEnv.map(p => p.v)    : [];
     const n = rendered.length;
 
-    // Tableau de gain pré-calculé (une fois pour tous les canaux)
-    const gainArr = new Float32Array(n);
-    for (let i = 0; i < n; i++) {
-      const frac = n > 1 ? i / (n - 1) : 0;
-      let g = scalarGain;
-      if (gainEnv) g *= owLerp1D(gainFracs, gainVals, frac);
-      if (fadeInFrac  > 0 && frac < fadeInFrac)        g *= frac / fadeInFrac;
-      if (fadeOutFrac > 0 && frac > (1 - fadeOutFrac)) g *= (1 - frac) / fadeOutFrac;
-      gainArr[i] = g;
-    }
-    // Si spatialisation active : gainArr appliqué après Faust (pas avant, pour éviter normalisation)
-    if (!window.owWamSpat) {
+    if (fadeInFrac > 0 || fadeOutFrac > 0) {
       for (let c = 0; c < rendered.numberOfChannels; c++) {
         const data = rendered.getChannelData(c);
-        for (let i = 0; i < n; i++) data[i] *= gainArr[i];
+        for (let i = 0; i < n; i++) {
+          const frac = n > 1 ? i / (n - 1) : 0;
+          let g = 1;
+          if (fadeInFrac  > 0 && frac < fadeInFrac)        g *= frac / fadeInFrac;
+          if (fadeOutFrac > 0 && frac > (1 - fadeOutFrac)) g *= (1 - frac) / fadeOutFrac;
+          data[i] *= g;
+        }
       }
     }
 
@@ -2435,8 +2418,8 @@ async function owMiseANiveauComplete(grp) {
         });
     }
 
-    // 7. Spatialisation (Faust offline) — gainArr appliqué sur la sortie multi-canal
-    if (window.owWamSpat) await owSpatialiserObjet(origObj, filename, gainArr);
+    // 7. Spatialisation (Faust offline)
+    if (window.owWamSpat) await owSpatialiserObjet(origObj, filename);
   }
 
   if (status) status.textContent = `Mise à niveau : ${count} fichier(s) traité(s)`;
@@ -3818,14 +3801,13 @@ async function owStartAudio() {
       const absPath  = await window.api?.resolveAudioPath?.(owFilePath, filename);
       if (!absPath) continue;
 
-      // Si le fichier vient de interprete/, transposition/tempo/enveloppe sont déjà appliqués
-      // Le gain scalaire (vol) est toujours appliqué à la lecture pour permettre les ajustements
+      // Si le fichier vient de interprete/, transposition/tempo sont déjà appliqués
+      // La courbe de gain (variationIntensite) et vol s'appliquent toujours en temps réel
       const processed  = absPath.includes('/interprete/') || absPath.includes('\\interprete\\');
       const vol        = obj.gain ?? 1.0;
       const tempoRatio = (!processed && grp.variationTempo) ? owTempoAtPx(objPx) : 1.0;
-      const gainEnv    = (!processed && grp.variationIntensite)
+      const gainEnv    = grp.variationIntensite
         ? owExtractGainEnvelope(objPx, obj.duree) : null;
-      console.log(`[Gain DBG] obj=${obj.id} gain=${obj.gain} processed=${processed} vol=${vol} gainEnv=${gainEnv?JSON.stringify(gainEnv.slice(0,3))+'…':null} file=${absPath.split('/').slice(-2).join('/')}`);
       const waitMs = Math.max(0, Math.round(delay * 1000) - (Date.now() - t0));
       const vid    = String(obj.id);
       _owPendingVoices++;
