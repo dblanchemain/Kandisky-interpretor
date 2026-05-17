@@ -3778,8 +3778,9 @@ async function owStartAudio() {
       // gain_env (variationIntensite) appliqué en temps réel ; obj.gain déjà dans le WAV
       const processed  = absPath.includes('/interprete/') || absPath.includes('\\interprete\\');
       const tempoRatio = (!processed && grp.variationTempo) ? owTempoAtPx(objPx) : 1.0;
+      const objDurSec  = obj.duree > 0 ? obj.duree : (obj.bkgWidth * sx0) / OW_BASE_PX;
       const gainEnv    = grp.variationIntensite
-        ? owExtractGainEnvelope(objPx, obj.duree) : null;
+        ? owExtractGainEnvelope(objPx, objDurSec) : null;
       const waitMs = Math.max(0, Math.round(delay * 1000) - (Date.now() - t0));
       const vid    = String(obj.id);
       _owPendingVoices++;
