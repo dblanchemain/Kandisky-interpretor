@@ -881,14 +881,17 @@ let owImagesDir  = '';
 let owSrcDir     = '';   // répertoire source d'où la partition a été chargée (≠ owFilePath après SaveAs)
 let interpGrpData = {};   // {grpId: {xml, imgBase}} — cache XMLs de groupe
 let owTableObjets = {};  // {grpId: [{posX,posY,...}]} — objets audio transformés par groupe
-let owModified   = false;
+let owModified        = false;
+let owIsOriginalFile  = false;  // true = fichier KandiskyScore sans <activeSec> → protéger de l'écrasement
 function owSetModified(val) {
   owModified = val;
   window.api?.nsmDirty?.(val);
   const lbl = document.getElementById('owFileLabel');
   if (lbl) {
     const base = (owFilePath || 'Sans titre').split(/[\\/]/).at(-1);
-    lbl.textContent = val ? ('* ' + base) : base;
+    const prefix = val ? '* ' : '';
+    const suffix = owIsOriginalFile ? ' [original]' : '';
+    lbl.textContent = prefix + base + suffix;
   }
 }
 let owTempoPoints = [];   // [{id,X,Y}]  X=pixels, Y=0..100  bpm=240-Y/0.4167
@@ -970,7 +973,7 @@ function owNouveau() {
   if (owModified && !confirm('Nouveau projet ? Les modifications non sauvegardées seront perdues.')) return;
   owSections = []; owGroups = []; owNuanceInsts = [];
   owNextSecId = 1; owNextGrpId = 1; owNextNuInstId = 1; owNextObjGlobalId = 0;
-  owActiveGrp = null; owActiveSec = null; owFilePath = null; owSrcDir = ''; owSetModified(false);
+  owActiveGrp = null; owActiveSec = null; owFilePath = null; owSrcDir = ''; owIsOriginalFile = false; owSetModified(false);
   interpGrpData = {};
   owTempoBySection = {}; owGainBySection = {}; owNuanceInstsBySection = {};
   owTempoPoints = []; owGainPoints = []; owNbTempo = 1; owNbGain = 1;
@@ -1151,6 +1154,7 @@ function owParseData(txt, label) {
 
     /* ── Restaurer la section active ── */
     const _activeSec = doc.querySelector('interpretor > activeSec');
+    owIsOriginalFile = !_activeSec;   // fichier KandiskyScore sans balise <activeSec> = original à protéger
     const _savedAct  = _activeSec ? parseInt(_activeSec.getAttribute('secid')) : NaN;
     if (!isNaN(_savedAct) && owSections.find(s => s.id === _savedAct)) {
       owActiveSec = _savedAct;
@@ -1253,6 +1257,11 @@ function owSerialise() {
 
 function owSauvegarder() {
   owCloseMenus();
+  if (owIsOriginalFile) {
+    alert('Ce fichier est une partition KandiskyScore originale.\nUtilisez « Sauvegarder sous… » pour créer un fichier d\'interprétation séparé.');
+    owSauvegarderSous();
+    return;
+  }
   if (typeof window.api !== 'undefined') {
     window.api.send('toMain', 'owSave;' + (owFilePath || '') + ';' + owSerialise());
   } else {
@@ -3721,6 +3730,7 @@ if (typeof window.api !== 'undefined') {
     switch (cmd) {
       case 'owSaved': {
         owFilePath = rest;
+        owIsOriginalFile = false;   // après un SaveAs réussi, le fichier n'est plus l'original
         owSetModified(false);
         const st = document.getElementById('spFaustStatus');
         if (st) { st.textContent = 'Sauvegardé : ' + rest.split(/[\\/]/).at(-1); setTimeout(() => { if (st.textContent.startsWith('Sauvegardé')) st.textContent = ''; }, 3000); }
