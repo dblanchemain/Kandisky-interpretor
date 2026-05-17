@@ -2307,11 +2307,13 @@ async function owSpatialiserObjet(obj, filename, gainArr) {
   }
 
   // Appliquer l'enveloppe de gain sur tous les canaux spatialisés
+  console.log(`[SPAT GAIN] ${filename} gainArr.length=${gainArr?.length} numSamples=${numSamples} P=${P} gainArr[0]=${gainArr?.[0]?.toFixed(3)} gainArr[last]=${gainArr?.[gainArr.length-1]?.toFixed(3)} processedCh[0] rms avant=${Math.sqrt(processedCh[0].reduce((s,v)=>s+v*v,0)/numSamples).toFixed(4)}`);
   if (gainArr?.length) {
     const nGain = Math.min(gainArr.length, numSamples);
     for (let c = 0; c < P; c++)
       for (let i = 0; i < nGain; i++) processedCh[c][i] *= gainArr[i];
   }
+  console.log(`[SPAT GAIN] processedCh[0] rms après=${Math.sqrt(processedCh[0].reduce((s,v)=>s+v*v,0)/numSamples).toFixed(4)}`);
 
   const wavData = owMultiChannelToWav(processedCh, sampleRate);
   await window.api.saveAudioFile(owFilePath, 'interprete', filename, wavData);
