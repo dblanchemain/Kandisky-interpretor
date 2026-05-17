@@ -491,8 +491,10 @@
 
   <div class="mnu-item" id="mnuEdition">Édition
     <ul class="mnu-drop">
+      <li onclick="owEtatProjet()">État du projet</li>
       <li onclick="owPermuter()">Permuter deux sections</li>
       <li onclick="owParamsGroupe()">Paramètres</li>
+      <li onclick="owExportMulticanal()">Exporter partition multicanal</li>
     </ul>
   </div>
 
@@ -811,6 +813,17 @@
   </div>
   <div class="ow-popup-foot">
     <button onclick="document.getElementById('grpInfoPopup').style.display='none'">Fermer</button>
+  </div>
+</div>
+
+<!-- ════════════════════════ POPUP : État du projet ════════════════════════ -->
+<div id="etatProjetPopup" class="ow-popup" style="display:none;top:80px;left:160px;width:480px;">
+  <div id="etatProjetPopupHeader" class="ow-popup-hd">État du projet</div>
+  <div class="ow-popup-body" style="padding:8px 12px;font-size:0.80em;max-height:480px;overflow-y:auto;">
+    <div id="etatProjetContent" style="white-space:pre;font-family:monospace;line-height:1.5;"></div>
+  </div>
+  <div class="ow-popup-foot">
+    <button onclick="document.getElementById('etatProjetPopup').style.display='none'">Fermer</button>
   </div>
 </div>
 
@@ -1291,6 +1304,36 @@ function owSupprimerSection() {
   }
   owSetModified(true);
   owRenderAll();
+}
+
+function owEtatProjet() {
+  owCloseMenus();
+  const sorted = [...owSections].sort((a, b) => a.posY - b.posY);
+  let lines = [];
+  let totalGrps = 0, totalObjs = 0;
+  for (const sec of sorted) {
+    const grps = owGroups.filter(g => g.sectionId === sec.id);
+    lines.push(`Section "${sec.name || sec.id}"  (${grps.length} groupe${grps.length !== 1 ? 's' : ''})`);
+    totalGrps += grps.length;
+    for (const grp of grps) {
+      const objs = grp.owTableObjets ?? [];
+      const tag  = grp.variationIntensite ? ' [∿gain]' : '';
+      lines.push(`  ▸ ${grp.name || grp.id}${tag}  —  ${objs.length} objet${objs.length !== 1 ? 's' : ''}`);
+      totalObjs += objs.length;
+      for (const obj of objs) {
+        const fileId   = obj._origId ?? obj.id;
+        const filename = fileId + '.wav';
+        const gainStr  = obj.gain != null ? obj.gain.toFixed(3) : '—';
+        lines.push(`      ${filename}  gain=${gainStr}`);
+      }
+    }
+  }
+  lines.unshift(`${sorted.length} section${sorted.length !== 1 ? 's' : ''}  ·  ${totalGrps} groupe${totalGrps !== 1 ? 's' : ''}  ·  ${totalObjs} objet${totalObjs !== 1 ? 's' : ''}`);
+  lines.unshift('');
+  lines.unshift(`Fichier : ${owFilePath || '(non sauvegardé)'}`);
+  document.getElementById('etatProjetContent').textContent = lines.join('\n');
+  const popup = document.getElementById('etatProjetPopup');
+  popup.style.display = 'block';
 }
 
 function owPermuter() {
@@ -2230,6 +2273,124 @@ function owMultiChannelToWav(channels, sampleRate) {
       dv.setInt16(off, Math.round(s < 0 ? s*32768 : s*32767), true); off += 2;
     }
   return ab;
+}
+
+// ─── Export partition multicanal (toutes sections → WAV N canaux) ─────────────
+async function owExportMulticanal() {
+  owCloseMenus();
+  if (!owFilePath) { alert('Aucune partition chargée.'); return; }
+  const nCh   = window.owWamSpat?.P ?? 2;
+  const SR    = 48000;
+  const status = document.getElementById('spFaustStatus');
+  const savedSec = owActiveSec;
+
+  if (status) status.textContent = 'Export multicanal : analyse…';
+  const clips = [];  // [{offsetSec, channels:Float32Array[], nFrames}]
+
+  for (const sec of [...owSections].sort((a, b) => a.posY - b.posY)) {
+    owLoadSectionCurves(sec.id);
+    const grps = owGroups.filter(g => g.sectionId === sec.id && g.owTableObjets?.length);
+    for (const grp of grps) {
+      const parsed = owParseGrpXml(grp.id);
+      if (!parsed) continue;
+      const { ctn } = parsed;
+      const sx0 = (grp._baseW !== undefined ? grp._baseW : grp.w) / ctn.ctnW;
+      for (const obj of grp.owTableObjets) {
+        const objPx     = grp.posX + (obj.posX - ctn.ctnX) * sx0;
+        const offsetSec = owScorePxToRealSec(0, objPx);
+        const objDurSec = obj.duree > 0 ? obj.duree : (obj.bkgWidth * sx0) / OW_BASE_PX;
+        const gainEnv   = grp.variationIntensite ? owExtractGainEnvelope(objPx, objDurSec) : null;
+        const fileId    = obj._origId ?? obj.id;
+        const filename  = fileId + '.wav';
+        if (status) status.textContent = `Export: lecture ${filename}…`;
+
+        let raw;
+        try { raw = await window.api.readAudioFile(owFilePath, 'interprete/' + filename); }
+        catch { try { raw = await window.api.readAudioFile(owFilePath, filename); } catch { continue; } }
+
+        let audioBuf;
+        try {
+          const ab = raw instanceof ArrayBuffer ? raw : (raw.buffer ?? new Uint8Array(raw).buffer);
+          audioBuf = owDecodeWavManual(ab);
+        } catch (e) { console.warn('[Export] décodage échoué:', filename, e); continue; }
+
+        const srcSR    = audioBuf.sampleRate;
+        const srcLen   = audioBuf.length;
+        const outFrames = Math.ceil(srcLen * SR / srcSR);
+
+        // Construire nCh canaux resampléstages → SR
+        const outChannels = [];
+        for (let c = 0; c < nCh; c++) {
+          const srcCh = c < audioBuf.numberOfChannels ? c : audioBuf.numberOfChannels - 1;
+          const src   = audioBuf.getChannelData(srcCh);
+          const out   = new Float32Array(outFrames);
+          if (srcSR === SR) {
+            out.set(src.subarray(0, Math.min(srcLen, outFrames)));
+          } else {
+            for (let i = 0; i < outFrames; i++) {
+              const pos = i * srcSR / SR;
+              const i0  = Math.floor(pos);
+              const fr  = pos - i0;
+              out[i]    = (i0 < srcLen ? src[i0] : 0) * (1 - fr) +
+                          (i0 + 1 < srcLen ? src[i0 + 1] : 0) * fr;
+            }
+          }
+          outChannels.push(out);
+        }
+
+        // Appliquer la variation de gain en temps réel (même logique que audio_server)
+        if (gainEnv && gainEnv.length >= 2) {
+          const fracs = gainEnv.map(p => p.frac);
+          const gains = gainEnv.map(p => p.v);
+          for (let c = 0; c < nCh; c++) {
+            for (let i = 0; i < outFrames; i++) {
+              const frac = outFrames > 1 ? i / (outFrames - 1) : 0;
+              let lo = 0, hi = fracs.length - 1;
+              while (lo < hi - 1) { const mid = (lo + hi) >> 1; if (fracs[mid] <= frac) lo = mid; else hi = mid; }
+              const t = fracs[hi] > fracs[lo] ? (frac - fracs[lo]) / (fracs[hi] - fracs[lo]) : 0;
+              outChannels[c][i] *= gains[lo] + (gains[hi] - gains[lo]) * t;
+            }
+          }
+        }
+        clips.push({ offsetSec, channels: outChannels, nFrames: outFrames });
+      }
+    }
+  }
+
+  owLoadSectionCurves(savedSec);
+
+  if (!clips.length) {
+    if (status) status.textContent = '';
+    alert('Aucun audio à exporter.');
+    return;
+  }
+
+  // Durée totale
+  let totalFrames = 0;
+  for (const cl of clips) totalFrames = Math.max(totalFrames, Math.round(cl.offsetSec * SR) + cl.nFrames);
+
+  if (status) status.textContent = `Export: mixage ${clips.length} clips, ${nCh} canaux…`;
+  const master = Array.from({length: nCh}, () => new Float32Array(totalFrames));
+  for (const cl of clips) {
+    const start = Math.round(cl.offsetSec * SR);
+    for (let c = 0; c < nCh; c++) {
+      const src = cl.channels[c];
+      for (let i = 0; i < cl.nFrames && start + i < totalFrames; i++) master[c][start + i] += src[i];
+    }
+  }
+
+  if (status) status.textContent = 'Export: encodage WAV…';
+  const wavAb = owMultiChannelToWav(master, SR);
+  const blob  = new Blob([wavAb], {type: 'audio/wav'});
+  const url   = URL.createObjectURL(blob);
+  const a     = document.createElement('a');
+  a.href = url;
+  a.download = (owFilePath || 'partition').split(/[/\\]/).pop().replace(/\.[^.]+$/, '') + '_multicanal.wav';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  if (status) status.textContent = `Export OK — ${nCh} ch · ${(totalFrames / SR).toFixed(1)} s`;
 }
 
 // Interpolation linéaire 1D sur un tableau (xs trié croissant)
