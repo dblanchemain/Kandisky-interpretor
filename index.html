@@ -1010,12 +1010,18 @@ function owParseData(txt, label) {
     owGroups   = [];
     let secId  = 1;
     let grpId  = 1;
+    let maxSecId = 0;
+    let anySecIdSaved = false;
     doc.querySelectorAll('section').forEach(secEl => {
-      const id     = secId++;
+      const rawSecId = parseInt(secEl.getAttribute('id'));
+      let id;
+      if (!isNaN(rawSecId) && rawSecId > 0) { id = rawSecId; anySecIdSaved = true; }
+      else { id = secId++; }
+      if (id > maxSecId) maxSecId = id;
       const grpEls = [...secEl.querySelectorAll('groupe')];
       const posY   = grpEls.length
         ? Math.min(...grpEls.map(g => n(g.getAttribute('posY'), 0)))
-        : (secId - 2) * 100 + 20;
+        : id * 100 + 20;
       owSections.push({ id, name: secEl.getAttribute('name') || ('Section ' + id), posY, color: '#4a90d9' });
       grpEls.forEach(g => {
         owGroups.push({
@@ -1138,11 +1144,45 @@ function owParseData(txt, label) {
       if (id >= owNextNuInstId) owNextNuInstId = id + 1;
     });
 
-    owNextSecId = secId;
+    owNextSecId = Math.max(secId, maxSecId + 1);
     owNextGrpId = grpId;
     owActiveGrp = null;
     owSetModified(false);
-    owActiveSec = owSections.length ? owSections[0].id : null;
+
+    /* ── Restaurer la section active ── */
+    const _activeSec = doc.querySelector('interpretor > activeSec');
+    const _savedAct  = _activeSec ? parseInt(_activeSec.getAttribute('secid')) : NaN;
+    if (!isNaN(_savedAct) && owSections.find(s => s.id === _savedAct)) {
+      owActiveSec = _savedAct;
+    } else if (!anySecIdSaved) {
+      /* Ancien format : migration si courbes et groupes sont sur des sections différentes */
+      owActiveSec = null;
+      for (const sec of owSections) {
+        const hasGroups = owGroups.some(g => g.sectionId === sec.id);
+        const hasCurves = (owGainBySection[sec.id]?.points.length > 0) ||
+                          (owTempoBySection[sec.id]?.points.length > 0);
+        if (!hasGroups && hasCurves) {
+          const target = owSections.find(s =>
+            s.id !== sec.id &&
+            owGroups.some(g => g.sectionId === s.id) &&
+            !((owGainBySection[s.id]?.points.length > 0) || (owTempoBySection[s.id]?.points.length > 0))
+          );
+          if (target) {
+            owGainBySection[target.id]        = owGainBySection[sec.id];
+            owTempoBySection[target.id]       = owTempoBySection[sec.id];
+            owNuanceInstsBySection[target.id] = owNuanceInstsBySection[sec.id] || [];
+            owGainBySection[sec.id]        = { points: [], nb: 1 };
+            owTempoBySection[sec.id]       = { points: [], nb: 1 };
+            owNuanceInstsBySection[sec.id] = [];
+            owActiveSec = target.id;
+            break;
+          }
+        }
+      }
+      if (!owActiveSec) owActiveSec = owSections.length ? owSections[0].id : null;
+    } else {
+      owActiveSec = owSections.length ? owSections[0].id : null;
+    }
     owLoadSectionCurves(owActiveSec);
     owCloseAllPopups();
     owResetBarVert();
@@ -1168,7 +1208,7 @@ function owSerialise() {
   const sorted = [...owSections].sort((a, bk) => a.posY - bk.posY);
   let xml = "<?xml version='1.0' encoding='UTF-8' ?>\n<openwork version='2.1.1'>\n  <partition name=\"\">\n";
   sorted.forEach(sec => {
-    xml += `    <section name="${x(sec.name)}">\n`;
+    xml += `    <section name="${x(sec.name)}" id="${sec.id}">\n`;
     owGroups.filter(g => g.sectionId === sec.id).forEach(grp => {
       xml += `      <groupe name="${x(grp.name)}"`;
       xml += ` direct="${b(grp.direct)}" renversement="${b(grp.renversement)}"`;
@@ -1202,6 +1242,7 @@ function owSerialise() {
       xml += `    <nuanceinst secid="${sec.id}" id="${inst.id}" nom="${x(inst.nom)}" posX="${inst.posX}" posY="${inst.posY}" gainPtId="${x(inst.gainPtId)}" grpId="${inst.grpId ?? ''}"/>\n`;
     });
   });
+  xml += `    <activeSec secid="${owActiveSec ?? ''}"/>\n`;
   const sp = owSpatialPrefs;
   xml += `    <spatial greffon="${sp.greffon}" nbCanaux="${sp.nbCanaux}"` +
     ` vbapLayout="${sp.vbapLayout}" hoaOrdre="${sp.hoaOrdre}"` +
