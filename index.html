@@ -2244,7 +2244,7 @@ function owLerp1D(xs, ys, x) {
 }
 
 // ─── Spatialisation Faust offline pour un objet (VBAP3D ou HOA) ──────────────
-async function owSpatialiserObjet(obj, filename) {
+async function owSpatialiserObjet(obj, filename, gainArr) {
   if (!window.owWamSpat) return false;
 
   // Lire depuis interprete/ (après transposition/gain/tempo)
@@ -2304,6 +2304,13 @@ async function owSpatialiserObjet(obj, filename) {
     }
     const out = processor.render([mono.subarray(offset, offset + len)], len);
     for (let c = 0; c < P; c++) processedCh[c].set(out[c], offset);
+  }
+
+  // Appliquer l'enveloppe de gain sur tous les canaux spatialisés
+  if (gainArr?.length) {
+    const nGain = Math.min(gainArr.length, numSamples);
+    for (let c = 0; c < P; c++)
+      for (let i = 0; i < nGain; i++) processedCh[c][i] *= gainArr[i];
   }
 
   const wavData = owMultiChannelToWav(processedCh, sampleRate);
@@ -2401,12 +2408,15 @@ async function owMiseANiveauComplete(grp) {
       if (fadeOutFrac > 0 && frac > (1 - fadeOutFrac)) g *= (1 - frac) / fadeOutFrac;
       gainArr[i] = g;
     }
-    for (let c = 0; c < rendered.numberOfChannels; c++) {
-      const data = rendered.getChannelData(c);
-      for (let i = 0; i < n; i++) data[i] *= gainArr[i];
+    // Si spatialisation active : gainArr appliqué après Faust (pas avant, pour éviter normalisation)
+    if (!window.owWamSpat) {
+      for (let c = 0; c < rendered.numberOfChannels; c++) {
+        const data = rendered.getChannelData(c);
+        for (let i = 0; i < n; i++) data[i] *= gainArr[i];
+      }
     }
 
-    // 5. Sauvegarde intermédiaire (mono/stéréo, après transposition+gain+fades)
+    // 5. Sauvegarde intermédiaire (mono/stéréo, après transposition+fades)
     const wavData = owAudioBufferToWav(rendered);
     await window.api.saveAudioFile(owFilePath, 'interprete', filename, wavData);
     count++;
@@ -2423,8 +2433,8 @@ async function owMiseANiveauComplete(grp) {
         });
     }
 
-    // 7. Spatialisation (Faust offline)
-    if (window.owWamSpat) await owSpatialiserObjet(origObj, filename);
+    // 7. Spatialisation (Faust offline) — gainArr appliqué sur la sortie multi-canal
+    if (window.owWamSpat) await owSpatialiserObjet(origObj, filename, gainArr);
   }
 
   if (status) status.textContent = `Mise à niveau : ${count} fichier(s) traité(s)`;
