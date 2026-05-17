@@ -3848,15 +3848,25 @@ function readPart() {
   }, frameMs);
 }
 
-function owRefreshAll() {
+async function owRefreshAll() {
   if (owActiveSec === null) return;
-  owGroups.filter(g => g.sectionId === owActiveSec).forEach(grp => {
+  const grps = owGroups.filter(g => g.sectionId === owActiveSec);
+  const status = document.getElementById('spFaustStatus');
+
+  for (const grp of grps) {
     const div = document.getElementById('grp' + grp.id);
-    if (!div) return;
-    const d = interpGrpData[grp.id];
-    if (d) drawObjets(d.xml, div, d.imgBase);
-    if (grp.owTableObjets?.length) owDrawTransformOverlay(grp, div);
-  });
+    if (div) {
+      const d = interpGrpData[grp.id];
+      if (d) drawObjets(d.xml, div, d.imgBase);
+      owComputeGrpObjets(grp);
+      owDrawTransformOverlay(grp, div);
+    }
+    if (grp.owTableObjets?.length) {
+      if (status) status.textContent = `Refresh : groupe ${grp.name || grp.id}…`;
+      await owMiseANiveauComplete(grp);
+    }
+  }
+  if (status) status.textContent = `Refresh : ${grps.length} groupe(s) traité(s)`;
 }
 
 // La connexion WebSocket démarre quand main.js envoie audioServerReady;PORT
