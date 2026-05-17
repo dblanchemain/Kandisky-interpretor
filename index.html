@@ -2383,6 +2383,7 @@ async function owMiseANiveauComplete(grp) {
     const objScorePx  = grp.posX + (origObj.posX - ctn.ctnX) * sx0;
     const durSec      = origObj.duree > 0 ? origObj.duree : rendered.length / rendered.sampleRate;
     const gainEnv     = owExtractGainEnvelope(objScorePx, durSec);
+    console.log(`[MAJ GAIN] ${filename} objScorePx=${objScorePx.toFixed(1)} durSec=${durSec.toFixed(2)} owGainPoints=${JSON.stringify(owGainPoints)} gainEnv=${JSON.stringify(gainEnv)}`);
     const envx        = origObj.envx?.length >= 2 ? origObj.envx : [0, 1];
     const fadeInFrac  = envx[0] || 0;
     const fadeOutFrac = 1 - (envx[1] ?? 1);
