@@ -151,11 +151,11 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js'),
-      devTools: false
+      preload: path.join(__dirname, 'preload.js')
     }
   });
   win.loadFile('index.html');
+  if (!app.isPackaged) win.webContents.openDevTools();
   win.removeMenu();
   win.on('closed', () => { win = null; });
 }
