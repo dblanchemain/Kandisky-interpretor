@@ -1978,8 +1978,7 @@ function owGrpPlayValidate() {
     owApplyGrpStyle(div, grp);
     owComputeGrpObjets(grp);
     owDrawTransformOverlay(grp, div);
-    if (grp.transposition)  owMiseANiveauAudio(grp).catch(e => console.error('[Audio]', e));
-    if (grp.variationTempo) owApplyRubberbandTempo(grp).catch(e => console.error('[Tempo]', e));
+    owMiseANiveauComplete(grp).catch(e => console.error('[Mise à niveau]', e));
   }
 }
 
@@ -2210,6 +2209,226 @@ function owAudioBufferToWav(buf) {
   return ab;
 }
 
+// ─── Encodage WAV multi-canaux (N×Float32Array → ArrayBuffer) ─────────────────
+function owMultiChannelToWav(channels, sampleRate) {
+  const nCh = channels.length, len = channels[0].length;
+  const ab  = new ArrayBuffer(44 + len * nCh * 2);
+  const dv  = new DataView(ab);
+  const w   = (off, val, n) => { for (let i=0;i<n;i++) dv.setUint8(off+i,(val>>(i*8))&0xff); };
+  const ws  = (off, s)     => { for (let i=0;i<s.length;i++) dv.setUint8(off+i, s.charCodeAt(i)); };
+  ws(0,'RIFF'); w(4,ab.byteLength-8,4); ws(8,'WAVE'); ws(12,'fmt ');
+  w(16,16,4); w(20,1,2); w(22,nCh,2); w(24,sampleRate,4);
+  w(28,sampleRate*nCh*2,4); w(32,nCh*2,2); w(34,16,2);
+  ws(36,'data'); w(40,len*nCh*2,4);
+  let off = 44;
+  for (let i = 0; i < len; i++)
+    for (let c = 0; c < nCh; c++) {
+      const s = Math.max(-1, Math.min(1, channels[c][i]));
+      dv.setInt16(off, Math.round(s < 0 ? s*32768 : s*32767), true); off += 2;
+    }
+  return ab;
+}
+
+// Interpolation linéaire 1D sur un tableau (xs trié croissant)
+function owLerp1D(xs, ys, x) {
+  if (!xs.length) return 1;
+  if (x <= xs[0])       return ys[0];
+  if (x >= xs.at(-1))  return ys.at(-1);
+  for (let i = 1; i < xs.length; i++) {
+    if (x < xs[i]) {
+      const t = (x - xs[i-1]) / (xs[i] - xs[i-1]);
+      return ys[i-1] + t * (ys[i] - ys[i-1]);
+    }
+  }
+  return ys.at(-1);
+}
+
+// ─── Spatialisation Faust offline pour un objet (VBAP3D ou HOA) ──────────────
+async function owSpatialiserObjet(obj, filename) {
+  if (!window.owWamSpat) return false;
+
+  // Lire depuis interprete/ (après transposition/gain/tempo)
+  const raw = await window.api.readAudioFile(owFilePath, 'interprete/' + filename);
+  if (!raw) return false;
+
+  let audioBuf;
+  try {
+    const ctx = new AudioContext();
+    audioBuf  = await ctx.decodeAudioData(new Uint8Array(raw).buffer.slice(0));
+    await ctx.close();
+  } catch(e) {
+    try { audioBuf = owDecodeWavManual(new Uint8Array(raw).buffer); }
+    catch(e2) { return false; }
+  }
+
+  const numSamples = audioBuf.length;
+  const sampleRate = audioBuf.sampleRate;
+  const P          = window.owWamSpat.P;
+  const blockSize  = 64;
+
+  // Mix vers mono (canal 0, ou moyenne si stéréo)
+  const mono = new Float32Array(numSamples);
+  for (let c = 0; c < audioBuf.numberOfChannels; c++) {
+    const ch = audioBuf.getChannelData(c);
+    for (let i = 0; i < numSamples; i++) mono[i] += ch[i];
+  }
+  if (audioBuf.numberOfChannels > 1)
+    for (let i = 0; i < numSamples; i++) mono[i] /= audioBuf.numberOfChannels;
+
+  // Processeur Faust offline
+  const processor  = await window.owWamSpat.createOfflineProcessor(sampleRate, blockSize);
+  const faustParms = processor.getParams();
+  const findP = pfx => faustParms.find(p => new RegExp(`^/?${pfx}\\d*`,'i').test(p))
+                    || faustParms.find(p => p.toLowerCase().includes(pfx.toLowerCase())) || null;
+  const paramX = findP('X'), paramY = findP('Y'), paramZ = findP('Z');
+  const paramD = faustParms.find(p => /dt|dist|cdistance/i.test(p)) || null;
+
+  const spT = obj.spt?.length ? obj.spt : [0];
+  const spX = obj.spx?.length ? obj.spx : [0];
+  const spY = obj.spy?.length ? obj.spy : [0];
+  const spZ = obj.spz?.length ? obj.spz : [0];
+  const spD = obj.spd?.length ? obj.spd : [1];
+  const durSec   = numSamples / sampleRate;
+  const spTimes  = spT.map(t => t * durSec);
+
+  const processedCh = Array.from({length: P}, () => new Float32Array(numSamples));
+
+  for (let offset = 0; offset < numSamples; offset += blockSize) {
+    const len = Math.min(blockSize, numSamples - offset);
+    for (let i = 0; i < len; i++) {
+      const t = (offset + i) / sampleRate;
+      if (paramX) processor.setParamValue(paramX, owLerp1D(spTimes, spX, t));
+      if (paramY) processor.setParamValue(paramY, owLerp1D(spTimes, spY, t));
+      if (paramZ) processor.setParamValue(paramZ, owLerp1D(spTimes, spZ, t));
+      if (paramD) processor.setParamValue(paramD, owLerp1D(spTimes, spD, t));
+    }
+    const out = processor.render([mono.subarray(offset, offset + len)], len);
+    for (let c = 0; c < P; c++) processedCh[c].set(out[c], offset);
+  }
+
+  const wavData = owMultiChannelToWav(processedCh, sampleRate);
+  await window.api.saveAudioFile(owFilePath, 'interprete', filename, wavData);
+  return true;
+}
+
+// ─── Pipeline complet : transposition → gain → tempo → spatialisation ─────────
+async function owMiseANiveauComplete(grp) {
+  if (!owFilePath || !window.api?.readAudioFile) return;
+  const parsed = owParseGrpXml(grp.id);
+  if (!parsed) return;
+  const { ctn } = parsed;
+  const origObjs = parsed.audio;
+  const newObjs  = grp.owTableObjets;
+  if (!newObjs?.length) return;
+
+  const SPACE_H = 3000;
+  const sx0     = (grp._baseW ?? grp.w) / ctn.ctnW;
+  const status  = document.getElementById('spFaustStatus');
+  let count = 0;
+
+  for (const newObj of newObjs) {
+    const origObj = origObjs.find(o => o.id === (newObj._origId ?? newObj.id));
+    if (!origObj) continue;
+    const filename = origObj.id + '.wav';
+    if (status) status.textContent = `Traitement ${filename}…`;
+
+    // 1. Lecture source originale (Audios/)
+    const raw = await window.api.readAudioFile(owFilePath, filename);
+    if (!raw) { console.warn('[MAJ] introuvable :', filename); continue; }
+    let audioBuf;
+    try {
+      const ctx = new AudioContext();
+      audioBuf  = await ctx.decodeAudioData(new Uint8Array(raw).buffer.slice(0));
+      await ctx.close();
+    } catch(e) {
+      try { audioBuf = owDecodeWavManual(new Uint8Array(raw).buffer); }
+      catch(e2) { console.warn('[MAJ] décodage échoué :', filename); continue; }
+    }
+
+    const sr  = audioBuf.sampleRate;
+    const nCh = audioBuf.numberOfChannels;
+
+    // 2. Trim (debut / fin)
+    const debut     = origObj.debut ?? 0;
+    const fin       = origObj.fin   ?? 1;
+    const trimStart = Math.floor(debut * audioBuf.length);
+    const trimLen   = Math.max(1, Math.floor(fin * audioBuf.length) - trimStart);
+
+    // 3. Transposition
+    let transpFactor = 1;
+    if (grp.transposition && origObj.flagTranspo !== 0) {
+      const origRef = owPitchRef(origObj);
+      const newRef  = owPitchRef(newObj);
+      const oF = (SPACE_H - origRef) / (SPACE_H / 2);
+      const nF = (SPACE_H - newRef)  / (SPACE_H / 2);
+      if (oF > 0 && nF > 0) transpFactor = nF / oF;
+    }
+    const newLen = Math.max(1, Math.round(trimLen / transpFactor));
+
+    const offCtx  = new OfflineAudioContext(nCh, newLen, sr);
+    const sliced  = offCtx.createBuffer(nCh, trimLen, sr);
+    for (let c = 0; c < nCh; c++)
+      sliced.copyToChannel(audioBuf.getChannelData(c).slice(trimStart, trimStart + trimLen), c);
+
+    const srcNode = offCtx.createBufferSource();
+    srcNode.buffer = sliced;
+    srcNode.playbackRate.value = transpFactor;
+    srcNode.connect(offCtx.destination);
+    srcNode.start(0);
+    const rendered = await offCtx.startRendering();
+
+    // 4. Gain scalaire + enveloppe + fades (appliqués sur les données rendues)
+    const scalarGain  = origObj.gain ?? 1;
+    const objScorePx  = grp.posX + (origObj.posX - ctn.ctnX) * sx0;
+    const gainEnv     = grp.variationIntensite
+      ? owExtractGainEnvelope(objScorePx, origObj.duree) : null;
+    const envx        = origObj.envx?.length >= 2 ? origObj.envx : [0, 1];
+    const fadeInFrac  = envx[0] || 0;
+    const fadeOutFrac = 1 - (envx[1] ?? 1);
+    const gainFracs   = gainEnv ? gainEnv.map(p => p.frac) : [];
+    const gainVals    = gainEnv ? gainEnv.map(p => p.v)    : [];
+    const n = rendered.length;
+
+    // Tableau de gain pré-calculé (une fois pour tous les canaux)
+    const gainArr = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const frac = n > 1 ? i / (n - 1) : 0;
+      let g = scalarGain;
+      if (gainEnv) g *= owLerp1D(gainFracs, gainVals, frac);
+      if (fadeInFrac  > 0 && frac < fadeInFrac)        g *= frac / fadeInFrac;
+      if (fadeOutFrac > 0 && frac > (1 - fadeOutFrac)) g *= (1 - frac) / fadeOutFrac;
+      gainArr[i] = g;
+    }
+    for (let c = 0; c < rendered.numberOfChannels; c++) {
+      const data = rendered.getChannelData(c);
+      for (let i = 0; i < n; i++) data[i] *= gainArr[i];
+    }
+
+    // 5. Sauvegarde intermédiaire (mono/stéréo, après transposition+gain+fades)
+    const wavData = owAudioBufferToWav(rendered);
+    await window.api.saveAudioFile(owFilePath, 'interprete', filename, wavData);
+    count++;
+
+    // 6. Tempo (Rubberband CLI)
+    if (grp.variationTempo && origObj.duree) {
+      const map = owBuildTempoMapForNote(objScorePx, origObj.duree);
+      const ys  = map.map(p => p.y);
+      const flat = Math.max(...ys) - Math.min(...ys) < 0.001 && Math.abs(ys[0] - 1) < 0.001;
+      if (!flat)
+        await window.api.processTempoNote({
+          partitionPath: owFilePath, fileId: origObj.id,
+          tempoMap: map, duree: origObj.duree
+        });
+    }
+
+    // 7. Spatialisation (Faust offline)
+    if (window.owWamSpat) await owSpatialiserObjet(origObj, filename);
+  }
+
+  if (status) status.textContent = `Mise à niveau : ${count} fichier(s) traité(s)`;
+  console.log(`[MAJ] ${count} fichier(s) traité(s)`);
+}
+
 // ─── Mise à niveau audio : transposition selon le nouveau posY ───────────────
 async function owMiseANiveauAudio(grp) {
   if (!grp.transposition) return;
@@ -2392,6 +2611,17 @@ function parseObjetEl(el) {
     flagTranspo:vi('flagtranspo', 1),
     basePosY:   vf('baseposy'),
     duree:      vf('duree', 0),
+    gain:    vf('gain', 1),
+    debut:   vf('debut', 0),
+    fin:     vf('fin', 1),
+    fadein:  v('fadein', 'l'),
+    fadeout: v('fadeout', 'l'),
+    envx:  v('envx','0.01,0.8').split(',').map(Number).filter(n => !isNaN(n)),
+    spx:   v('spx','0').split(',').map(Number).filter(n => !isNaN(n)),
+    spy:   v('spy','0').split(',').map(Number).filter(n => !isNaN(n)),
+    spz:   v('spz','0').split(',').map(Number).filter(n => !isNaN(n)),
+    spt:   v('spt','0').split(',').map(Number).filter(n => !isNaN(n)),
+    spd:   v('spd','1').split(',').map(Number).filter(n => !isNaN(n)),
   };
 }
 
@@ -3574,14 +3804,17 @@ async function owStartAudio() {
       const absPath  = await window.api?.resolveAudioPath?.(owFilePath, filename);
       if (!absPath) continue;
 
-      const tempoRatio = grp.variationTempo ? owTempoAtPx(objPx) : 1.0;
-      const gainEnv    = grp.variationIntensite ? owExtractGainEnvelope(objPx, obj.duree) : null;
+      // Si le fichier vient de interprete/, la mise à niveau est déjà appliquée → pas de DSP
+      const processed = absPath.includes('/interprete/') || absPath.includes('\\interprete\\');
+      const tempoRatio = (!processed && grp.variationTempo) ? owTempoAtPx(objPx) : 1.0;
+      const gainEnv    = (!processed && grp.variationIntensite)
+        ? owExtractGainEnvelope(objPx, obj.duree) : null;
       const waitMs = Math.max(0, Math.round(delay * 1000) - (Date.now() - t0));
       const vid    = String(obj.id);
       _owPendingVoices++;
       _owPlayTimers.push(setTimeout(() => owAudioSend({
         cmd: 'play', id: vid, file: absPath,
-        tempo_ratio: tempoRatio,
+        ...(Math.abs(tempoRatio - 1) > 1e-4 ? { tempo_ratio: tempoRatio } : {}),
         ...(gainEnv ? { gain_env: gainEnv } : {}),
         notify_end: true
       }), waitMs));
