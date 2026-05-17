@@ -2381,8 +2381,8 @@ async function owMiseANiveauComplete(grp) {
     // 4. Enveloppe + fades (le gain scalaire est appliqué au moment de la lecture via vol)
     const scalarGain  = 1;
     const objScorePx  = grp.posX + (origObj.posX - ctn.ctnX) * sx0;
-    const gainEnv     = grp.variationIntensite
-      ? owExtractGainEnvelope(objScorePx, origObj.duree) : null;
+    const durSec      = origObj.duree > 0 ? origObj.duree : rendered.length / rendered.sampleRate;
+    const gainEnv     = owExtractGainEnvelope(objScorePx, durSec);
     const envx        = origObj.envx?.length >= 2 ? origObj.envx : [0, 1];
     const fadeInFrac  = envx[0] || 0;
     const fadeOutFrac = 1 - (envx[1] ?? 1);
