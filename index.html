@@ -3805,7 +3805,8 @@ async function owStartAudio() {
       if (!absPath) continue;
 
       // Si le fichier vient de interprete/, la mise à niveau est déjà appliquée → pas de DSP
-      const processed = absPath.includes('/interprete/') || absPath.includes('\\interprete\\');
+      const processed  = absPath.includes('/interprete/') || absPath.includes('\\interprete\\');
+      const vol        = (!processed) ? (obj.gain ?? 1.0) : 1.0;
       const tempoRatio = (!processed && grp.variationTempo) ? owTempoAtPx(objPx) : 1.0;
       const gainEnv    = (!processed && grp.variationIntensite)
         ? owExtractGainEnvelope(objPx, obj.duree) : null;
@@ -3814,8 +3815,9 @@ async function owStartAudio() {
       _owPendingVoices++;
       _owPlayTimers.push(setTimeout(() => owAudioSend({
         cmd: 'play', id: vid, file: absPath,
-        ...(Math.abs(tempoRatio - 1) > 1e-4 ? { tempo_ratio: tempoRatio } : {}),
-        ...(gainEnv ? { gain_env: gainEnv } : {}),
+        ...(Math.abs(vol - 1) > 1e-4         ? { vol }                   : {}),
+        ...(Math.abs(tempoRatio - 1) > 1e-4  ? { tempo_ratio: tempoRatio } : {}),
+        ...(gainEnv                           ? { gain_env: gainEnv }     : {}),
         notify_end: true
       }), waitMs));
       count++;
