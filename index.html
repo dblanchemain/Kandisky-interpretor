@@ -3156,6 +3156,7 @@ function owDragPoint(el, id, arr, drawFn, titleFn, startEvt) {
   document.onmouseup = function() {
     document.onmousemove = null;
     document.onmouseup   = null;
+    owRedrawReglette();
     owSetModified(true);
   };
 }
@@ -3166,6 +3167,7 @@ function owInsertTempoPoint(x, y) {
   owTempoPoints.sort((a, b) => a.X - b.X);
   owCreatePointEl(id, x, y, 'green', owTempoPoints, owDrawTempo, owTempoPointTitle);
   owDrawTempo();
+  owRedrawReglette();
   owSetModified(true);
 }
 function owInsertGainPoint(x, y) {
@@ -3217,6 +3219,7 @@ function owRebuildTempoPoints() {
   owGainPoints.forEach(p  => owCreatePointEl(p.id, p.X, p.Y, '#c33',  owGainPoints,  owDrawGain,  owGainPointTitle));
   owDrawTempo();
   owDrawGain();
+  owRedrawReglette();
 }
 
 document.getElementById('owBarClickArea').addEventListener('click', function(e) {
@@ -3311,7 +3314,7 @@ if (typeof window.api !== 'undefined') {
 // ═══════════════════════════════════════════════
 // Affiche la position temporelle correspondant à posX (pixels scroll)
 function owSetCompteur(posX) {
-  const sec  = posX / (OW_BASE_PX * owZoomScale);
+  const sec  = owScorePxToRealSec(0, posX / owZoomScale);
   const h    = Math.floor(sec / 3600);
   const m    = Math.floor((sec % 3600) / 60);
   const s    = Math.floor(sec % 60);
@@ -3642,17 +3645,18 @@ function owCreateReglette() {
   sep.setAttribute('stroke', '#aaa'); sep.setAttribute('stroke-width', '0.5');
   svg.appendChild(sep);
 
-  // ── Réglette temporelle (zone 0→25px) ─────────
-  const step = OW_BASE_PX * scale;   // px par seconde
+  // ── Réglette temporelle (zone 0→25px) — s'adapte au tempo ─────────
+  // Même principe que kandiskyscore3 : step = OW_BASE_PX*scale/bps (1 seconde réelle)
+  let p = 0;
   let tickCount = 0;
-  for (let p = 0; p < nbmax; p += step, tickCount++) {
+  while (p < nbmax) {
+    const bps     = owTempoAtPx(p / scale);
     const isMajor = (tickCount % 10 === 0);
-    const line = document.createElementNS(OW_SVG, 'line');
+    const line    = document.createElementNS(OW_SVG, 'line');
     line.setAttribute('x1', p); line.setAttribute('y1', 0);
     line.setAttribute('x2', p); line.setAttribute('y2', isMajor ? 20 : 11);
     line.setAttribute('stroke', '#444'); line.setAttribute('stroke-width', 1);
     svg.appendChild(line);
-
     if (isMajor && tickCount > 0) {
       const txt = document.createElementNS(OW_SVG, 'text');
       txt.setAttribute('x', p + 2); txt.setAttribute('y', 20);
@@ -3660,6 +3664,10 @@ function owCreateReglette() {
       txt.textContent = tickCount + 's';
       svg.appendChild(txt);
     }
+    const step = OW_BASE_PX * scale / Math.max(bps, 0.01);
+    if (step < 0.5) break;
+    p += step;
+    tickCount++;
   }
 
   // ── Réglette de mesures (zone 25→50px) ────────
