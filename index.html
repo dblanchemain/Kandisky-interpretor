@@ -484,8 +484,8 @@
   <div class="mnu-item" id="mnuFichier">Fichier
     <ul class="mnu-drop">
       <li onclick="owOuvrir()">Ouvrir une partition</li>
-      <li onclick="owSauvegarder()">Sauvegarder</li>
-      <li onclick="owSauvegarderSous()">Sauvegarder sous</li>
+      <li onclick="owSauvegarder()" title="Ctrl+S">Sauvegarder (courante)</li>
+      <li onclick="owSauvegarderSous()" title="Ctrl+Shift+S">Sauvegarder sous…</li>
     </ul>
   </div>
 
@@ -884,6 +884,11 @@ let owModified   = false;
 function owSetModified(val) {
   owModified = val;
   window.api?.nsmDirty?.(val);
+  const lbl = document.getElementById('owFileLabel');
+  if (lbl) {
+    const base = (owFilePath || 'Sans titre').split(/[\\/]/).at(-1);
+    lbl.textContent = val ? ('* ' + base) : base;
+  }
 }
 let owTempoPoints = [];   // [{id,X,Y}]  X=pixels, Y=0..100  bpm=240-Y/0.4167
 let owGainPoints  = [];   // [{id,X,Y}]  gain=(100-Y)*0.05
@@ -3672,11 +3677,13 @@ if (typeof window.api !== 'undefined') {
     const cmd  = sep > -1 ? data.substring(0, sep) : data;
     const rest = sep > -1 ? data.substring(sep + 1) : '';
     switch (cmd) {
-      case 'owSaved':
+      case 'owSaved': {
         owFilePath = rest;
         owSetModified(false);
-        document.getElementById('owFileLabel').textContent = rest.split(/[\\/]/).at(-1);
+        const st = document.getElementById('spFaustStatus');
+        if (st) { st.textContent = 'Sauvegardé : ' + rest.split(/[\\/]/).at(-1); setTimeout(() => { if (st.textContent.startsWith('Sauvegardé')) st.textContent = ''; }, 3000); }
         break;
+      }
       case 'owLoaded': {
         const nl   = rest.indexOf('\n');
         const fp   = nl > -1 ? rest.substring(0, nl) : '';
@@ -4038,6 +4045,13 @@ function owUpdateWorkspace() {
 }
 owUpdateWorkspace();
 window.addEventListener('resize', owUpdateWorkspace);
+
+document.addEventListener('keydown', function(e) {
+  if (e.ctrlKey && e.key === 's') {
+    e.preventDefault();
+    if (e.shiftKey) owSauvegarderSous(); else owSauvegarder();
+  }
+});
 
 // ═══════════════════════════════════════════════
 //  RÉGLETTES + ZOOM
