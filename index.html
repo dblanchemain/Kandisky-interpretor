@@ -3775,8 +3775,9 @@ async function owStartAudio() {
       if (!absPath) continue;
 
       // interprete/ : transposition/tempo/spatialisation déjà appliqués
-      // variationIntensite : courbe de gain toujours appliquée en temps réel via gain_env
+      // vol et gain_env toujours appliqués en temps réel (non cuits dans le WAV)
       const processed  = absPath.includes('/interprete/') || absPath.includes('\\interprete\\');
+      const vol        = obj.gain ?? 1.0;
       const tempoRatio = (!processed && grp.variationTempo) ? owTempoAtPx(objPx) : 1.0;
       const gainEnv    = grp.variationIntensite
         ? owExtractGainEnvelope(objPx, obj.duree) : null;
@@ -3785,6 +3786,7 @@ async function owStartAudio() {
       _owPendingVoices++;
       _owPlayTimers.push(setTimeout(() => owAudioSend({
         cmd: 'play', id: vid, file: absPath,
+        ...(Math.abs(vol - 1) > 1e-4         ? { vol }                   : {}),
         ...(Math.abs(tempoRatio - 1) > 1e-4  ? { tempo_ratio: tempoRatio } : {}),
         ...(gainEnv                           ? { gain_env: gainEnv }     : {}),
         notify_end: true
