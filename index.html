@@ -2330,6 +2330,7 @@ async function owMiseANiveauComplete(grp) {
     const origObj = origObjs.find(o => o.id === (newObj._origId ?? newObj.id));
     if (!origObj) continue;
     const filename = origObj.id + '.wav';
+    console.log(`[MAJ DBG] ${filename} origObj.gain=${origObj.gain} newObj.gain=${newObj.gain}`);
     if (status) status.textContent = `Traitement ${filename}…`;
 
     // 1. Lecture source originale (Audios/)
