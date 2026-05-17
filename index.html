@@ -2378,8 +2378,8 @@ async function owMiseANiveauComplete(grp) {
     srcNode.start(0);
     const rendered = await offCtx.startRendering();
 
-    // 4. Gain scalaire + enveloppe + fades (appliqués sur les données rendues)
-    const scalarGain  = origObj.gain ?? 1;
+    // 4. Enveloppe + fades (le gain scalaire est appliqué au moment de la lecture via vol)
+    const scalarGain  = 1;
     const objScorePx  = grp.posX + (origObj.posX - ctn.ctnX) * sx0;
     const gainEnv     = grp.variationIntensite
       ? owExtractGainEnvelope(objScorePx, origObj.duree) : null;
@@ -3805,9 +3805,10 @@ async function owStartAudio() {
       const absPath  = await window.api?.resolveAudioPath?.(owFilePath, filename);
       if (!absPath) continue;
 
-      // Si le fichier vient de interprete/, la mise à niveau est déjà appliquée → pas de DSP
+      // Si le fichier vient de interprete/, transposition/tempo/enveloppe sont déjà appliqués
+      // Le gain scalaire (vol) est toujours appliqué à la lecture pour permettre les ajustements
       const processed  = absPath.includes('/interprete/') || absPath.includes('\\interprete\\');
-      const vol        = (!processed) ? (obj.gain ?? 1.0) : 1.0;
+      const vol        = obj.gain ?? 1.0;
       const tempoRatio = (!processed && grp.variationTempo) ? owTempoAtPx(objPx) : 1.0;
       const gainEnv    = (!processed && grp.variationIntensite)
         ? owExtractGainEnvelope(objPx, obj.duree) : null;
