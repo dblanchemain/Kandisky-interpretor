@@ -3113,6 +3113,53 @@ function owGainPointTitle(x, y) {
   return 't=' + (x / OW_BASE_PX).toFixed(2) + 's  gain=' + ((100 - y) * 0.05).toFixed(2);
 }
 
+// Extrait l'enveloppe de gain pour un objet depuis owGainPoints (même logique que KS3).
+// Retourne [{frac:0..1, v:gainValue}] ou null si inutile (gain plat à 1.0).
+function owExtractGainEnvelope(objScorePx, objDurationSec) {
+  if (!objDurationSec) return null;
+  const pts = [...owGainPoints].sort((a, b) => a.X - b.X);
+  if (!pts.length) return null;
+
+  const objWidthPx = objDurationSec * OW_BASE_PX;
+  const objEndPx   = objScorePx + objWidthPx;
+  function lerp(a, b, t) { return a + (b - a) * t; }
+
+  // Étend la courbe à plat hors des bornes (comme KS3)
+  const ext = [{X: -Infinity, Y: pts[0].Y}, ...pts, {X: Infinity, Y: pts.at(-1).Y}];
+
+  let result = [];
+  for (let i = 0; i < ext.length - 1; i++) {
+    const p1 = ext[i], p2 = ext[i + 1];
+    if (p2.X <= objScorePx || p1.X >= objEndPx) continue;
+    if (p1.X <= objScorePx && p2.X >= objScorePx) {
+      const t = (p2.X - p1.X) ? (objScorePx - p1.X) / (p2.X - p1.X) : 0;
+      result.push({X: objScorePx, Y: lerp(p1.Y, p2.Y, t)});
+    }
+    if (p1.X > objScorePx && p1.X < objEndPx) result.push({X: p1.X, Y: p1.Y});
+  }
+  // Point de sortie
+  for (let i = 0; i < ext.length - 1; i++) {
+    const p1 = ext[i], p2 = ext[i + 1];
+    if (p1.X <= objEndPx && p2.X >= objEndPx) {
+      const t = (p2.X - p1.X) ? (objEndPx - p1.X) / (p2.X - p1.X) : 0;
+      result.push({X: objEndPx, Y: lerp(p1.Y, p2.Y, t)});
+      break;
+    }
+  }
+
+  if (!result.length) return null;
+
+  // Convertit en fractions 0..1 (audio_server mappe sur les frames réelles)
+  const env = result.map(p => ({
+    frac: objWidthPx > 0 ? (p.X - objScorePx) / objWidthPx : 0,
+    v:    (100 - p.Y) * 0.05
+  }));
+
+  // Inutile si l'enveloppe est déjà plate à 1.0
+  const flat = env.every(p => Math.abs(p.v - 1.0) < 0.001);
+  return flat ? null : env;
+}
+
 function owCreatePointEl(id, x, y, color, arr, drawFn, titleFn) {
   const el = document.createElement('div');
   el.id = id;
@@ -3528,12 +3575,14 @@ async function owStartAudio() {
       if (!absPath) continue;
 
       const tempoRatio = grp.variationTempo ? owTempoAtPx(objPx) : 1.0;
+      const gainEnv    = grp.variationIntensite ? owExtractGainEnvelope(objPx, obj.duree) : null;
       const waitMs = Math.max(0, Math.round(delay * 1000) - (Date.now() - t0));
       const vid    = String(obj.id);
       _owPendingVoices++;
       _owPlayTimers.push(setTimeout(() => owAudioSend({
         cmd: 'play', id: vid, file: absPath,
         tempo_ratio: tempoRatio,
+        ...(gainEnv ? { gain_env: gainEnv } : {}),
         notify_end: true
       }), waitMs));
       count++;
