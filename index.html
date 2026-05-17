@@ -1978,7 +1978,8 @@ function owGrpPlayValidate() {
     owApplyGrpStyle(div, grp);
     owComputeGrpObjets(grp);
     owDrawTransformOverlay(grp, div);
-    if (grp.transposition) owMiseANiveauAudio(grp).catch(e => console.error('[Audio]', e));
+    if (grp.transposition)  owMiseANiveauAudio(grp).catch(e => console.error('[Audio]', e));
+    if (grp.variationTempo) owApplyRubberbandTempo(grp).catch(e => console.error('[Tempo]', e));
   }
 }
 
@@ -2390,6 +2391,7 @@ function parseObjetEl(el) {
     file:       v('file',''),
     flagTranspo:vi('flagtranspo', 1),
     basePosY:   vf('baseposy'),
+    duree:      vf('duree', 0),
   };
 }
 
@@ -3040,6 +3042,73 @@ function owDrawGain() {
 function owTempoPointTitle(x, y) {
   return 't=' + (x / OW_BASE_PX).toFixed(2) + 's  bpm=' + (240 - y / 0.4167).toFixed(1);
 }
+
+// ─── Interpolation et intégration du tempo ──────────────────────────────────
+function owTempoAtPx(scorePx) {
+  const pts = [...owTempoPoints].sort((a, b) => a.X - b.X);
+  if (!pts.length) return 1.0;
+  const bpmOf = p => 240 - p.Y / 0.4167;
+  if (scorePx <= pts[0].X) return bpmOf(pts[0]) / 60;
+  const last = pts.at(-1);
+  if (scorePx >= last.X)   return bpmOf(last) / 60;
+  for (let i = 1; i < pts.length; i++) {
+    if (scorePx < pts[i].X) {
+      const a = pts[i-1], b = pts[i];
+      const t = (scorePx - a.X) / (b.X - a.X);
+      return (bpmOf(a) + t * (bpmOf(b) - bpmOf(a))) / 60;
+    }
+  }
+  return bpmOf(last) / 60;
+}
+
+// Intègre 1/(tempo × OW_BASE_PX) sur [fromPx, toPx] → secondes réelles
+function owScorePxToRealSec(fromPx, toPx) {
+  if (toPx <= fromPx) return 0;
+  const n    = Math.max(10, Math.round((toPx - fromPx) / 5));
+  const step = (toPx - fromPx) / n;
+  let t = 0;
+  for (let i = 0; i < n; i++)
+    t += step / (owTempoAtPx(fromPx + (i + 0.5) * step) * OW_BASE_PX);
+  return t;
+}
+
+// Construit le tempoMap pour une note (tableau {x, y} pour rubberband timeMap)
+// x = secondes depuis le début de la note (au tempo de base), y = BPS
+function owBuildTempoMapForNote(noteStartPx, noteDurationSec) {
+  const noteEndPx = noteStartPx + noteDurationSec * OW_BASE_PX;
+  const result    = [{x: 0, y: owTempoAtPx(noteStartPx)}];
+  for (const p of [...owTempoPoints].sort((a, b) => a.X - b.X)) {
+    if (p.X > noteStartPx && p.X < noteEndPx)
+      result.push({x: (p.X - noteStartPx) / OW_BASE_PX, y: (240 - p.Y / 0.4167) / 60});
+  }
+  result.push({x: noteDurationSec, y: owTempoAtPx(noteEndPx)});
+  return result;
+}
+
+// Pré-traitement rubberband pour les groupes variationTempo
+async function owApplyRubberbandTempo(grp) {
+  if (!grp.variationTempo || !owFilePath) return;
+  if (!window.api?.processTempoNote)      return;
+  const parsed = owParseGrpXml(grp.id);
+  if (!parsed) return;
+  const { ctn } = parsed;
+  const sx0    = (grp._baseW !== undefined ? grp._baseW : grp.w) / ctn.ctnW;
+  const status = document.getElementById('spFaustStatus');
+  if (status) status.textContent = 'Tempo rubberband…';
+  let count = 0;
+  for (const obj of grp.owTableObjets) {
+    if (!obj.duree) continue;
+    const fileId  = obj._origId ?? obj.id;
+    const objPx   = grp.posX + (obj.posX - ctn.ctnX) * sx0;
+    const map     = owBuildTempoMapForNote(objPx, obj.duree);
+    // Inutile si tempo constant et unitaire
+    const ys      = map.map(p => p.y);
+    if (Math.max(...ys) - Math.min(...ys) < 0.001 && Math.abs(ys[0] - 1) < 0.001) continue;
+    const ok = await window.api.processTempoNote({partitionPath: owFilePath, fileId, tempoMap: map, duree: obj.duree});
+    if (ok) count++;
+  }
+  if (status) status.textContent = `Tempo : ${count} fichier(s) → Audios/interprete/`;
+}
 function owGainPointTitle(x, y) {
   return 't=' + (x / OW_BASE_PX).toFixed(2) + 's  gain=' + ((100 - y) * 0.05).toFixed(2);
 }
@@ -3431,7 +3500,9 @@ async function owStartAudio() {
 
   owStopAudio();
 
-  const barTime = owBarVertTime;
+  const bar        = document.getElementById('owBarVerticale');
+  const barScreenPx = parseFloat(bar.style.left) || 0;
+  const barScorePx  = barScreenPx / owZoomScale;
   const t0 = Date.now();
   let count = 0;
 
@@ -3444,9 +3515,8 @@ async function owStartAudio() {
     const sx0 = (grp._baseW !== undefined ? grp._baseW : grp.w) / ctn.ctnW;
 
     for (const obj of grp.owTableObjets) {
-      const objPx   = grp.posX + (obj.posX - ctn.ctnX) * sx0;
-      const objTime = objPx / OW_BASE_PX;
-      const delay   = objTime - barTime;
+      const objPx  = grp.posX + (obj.posX - ctn.ctnX) * sx0;
+      const delay  = owScorePxToRealSec(barScorePx, objPx);
       if (delay < -0.05) continue;
 
       const fileId   = obj._origId ?? obj.id;
@@ -3454,11 +3524,15 @@ async function owStartAudio() {
       const absPath  = await window.api?.resolveAudioPath?.(owFilePath, filename);
       if (!absPath) continue;
 
+      const tempoRatio = grp.variationTempo ? owTempoAtPx(objPx) : 1.0;
       const waitMs = Math.max(0, Math.round(delay * 1000) - (Date.now() - t0));
       const vid    = String(obj.id);
-      const fp     = absPath;
       _owPendingVoices++;
-      _owPlayTimers.push(setTimeout(() => owAudioSend({ cmd: 'play', id: vid, file: fp, notify_end: true }), waitMs));
+      _owPlayTimers.push(setTimeout(() => owAudioSend({
+        cmd: 'play', id: vid, file: absPath,
+        tempo_ratio: tempoRatio,
+        notify_end: true
+      }), waitMs));
       count++;
     }
   }
@@ -3481,9 +3555,11 @@ function readPart() {
   owStartAudio().catch(e => console.error('[Lecture audio]', e));
   const frameMs = 50;
   owPlayTimer = setInterval(() => {
-    const bar = document.getElementById('owBarVerticale');
-    const cur = parseFloat(bar.style.left) || 0;
-    owMoveBarTo(cur + OW_BASE_PX * owZoomScale * frameMs / 1000);
+    const bar       = document.getElementById('owBarVerticale');
+    const curScreen = parseFloat(bar.style.left) || 0;
+    const curScore  = curScreen / owZoomScale;
+    const bps       = owTempoAtPx(curScore);
+    owMoveBarTo(curScreen + OW_BASE_PX * bps * owZoomScale * frameMs / 1000);
   }, frameMs);
 }
 

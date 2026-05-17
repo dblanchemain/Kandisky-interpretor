@@ -212,6 +212,95 @@ function findBundledBin(name) {
   return fs.existsSync(bin) ? bin : null;
 }
 
+// ── Rubberband CLI (time-stretch avec timeMap) ────────────────────────────────
+function buildSmoothRubberbandTimeMap(tempoCurve, sampleRate, durationSec, totalInFrames, stepSec = 0.1) {
+  const lines = ['0 0'];
+  let outTime = 0;
+  const tempoAt = x => {
+    for (let i = 1; i < tempoCurve.length; i++) {
+      const a = tempoCurve[i-1], b = tempoCurve[i];
+      if (x <= a.x) return a.y;
+      if (x <  b.x) return a.y + (b.y - a.y) * (x - a.x) / (b.x - a.x);
+    }
+    return tempoCurve.at(-1).y;
+  };
+  for (let t = stepSec; t <= durationSec; t += stepSec) {
+    const y       = Math.max(tempoAt(t), 1e-4);
+    outTime      += stepSec / y;
+    const inFrame  = Math.round(t * sampleRate);
+    const outFrame = Math.round(outTime * sampleRate);
+    if (inFrame > totalInFrames) break;
+    lines.push(`${inFrame} ${outFrame}`);
+  }
+  const lastIn = parseInt(lines.at(-1).split(' ')[0]);
+  if (lastIn < totalInFrames) {
+    const remaining = (totalInFrames - lastIn) / sampleRate;
+    const finalOut  = outTime + remaining / Math.max(tempoAt(durationSec), 1e-4);
+    lines.push(`${totalInFrames} ${Math.round(finalOut * sampleRate)}`);
+  }
+  return lines.join('\n');
+}
+
+function readWavInfo(filePath) {
+  try {
+    const buf = Buffer.alloc(44);
+    const fd  = fs.openSync(filePath, 'r');
+    fs.readSync(fd, buf, 0, 44, 0);
+    fs.closeSync(fd);
+    const sampleRate    = buf.readUInt32LE(24);
+    const channels      = buf.readUInt16LE(22);
+    const bitsPerSample = buf.readUInt16LE(34);
+    const dataSize      = buf.readUInt32LE(40);
+    const frames        = Math.floor(dataSize / (channels * (bitsPerSample / 8)));
+    return { sampleRate, frames, channels };
+  } catch(e) { return null; }
+}
+
+async function callRubberbandCLI(inputPath, outputPath, timeRatio, pitchSemitones, timeMapPath) {
+  const rb  = findBundledBin('rubberband') || 'rubberband';
+  const args = [
+    '-t', String(timeRatio), '-p', String(pitchSemitones),
+    '--window-long', '--no-transients', '--smoothing', '--no-threads',
+  ];
+  if (timeMapPath) args.push('-M', timeMapPath);
+  args.push(inputPath, outputPath);
+
+  return new Promise((resolve, reject) => {
+    const proc = spawn(rb, args, { windowsHide: true });
+    proc.on('error', reject);
+    proc.on('close', code => code === 0 ? resolve() : reject(new Error('rubberband exit ' + code)));
+  });
+}
+
+ipcMain.handle('processTempoNote', async (_, { partitionPath, fileId, tempoMap, duree }) => {
+  if (!partitionPath || !fileId || !tempoMap?.length) return false;
+  const audiosDir  = path.join(path.dirname(partitionPath), 'Audios');
+  const interpDir  = path.join(audiosDir, 'interprete');
+  const filename   = fileId + '.wav';
+  const inputPath  = fs.existsSync(path.join(interpDir, filename))
+    ? path.join(interpDir, filename)
+    : path.join(audiosDir, filename);
+  if (!fs.existsSync(inputPath)) return false;
+  const info = readWavInfo(inputPath);
+  if (!info) return false;
+
+  fs.mkdirSync(interpDir, { recursive: true });
+  const tmPath  = path.join(app.getPath('userData'), `timemap_${fileId}.txt`);
+  const outPath = path.join(interpDir, filename);
+  const timemap = buildSmoothRubberbandTimeMap(tempoMap, info.sampleRate, duree, info.frames);
+  fs.writeFileSync(tmPath, timemap, 'utf-8');
+
+  try {
+    await callRubberbandCLI(inputPath, outPath, 1.0, 0, tmPath);
+    return true;
+  } catch(e) {
+    console.error('[Tempo] rubberband:', e.message);
+    return false;
+  } finally {
+    try { fs.unlinkSync(tmPath); } catch(_) {}
+  }
+});
+
 // ── Serveur audio Python (audio_server.py) ────────────────────────────────────
 let audioServerProc = null;
 
