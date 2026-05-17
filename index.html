@@ -2282,6 +2282,7 @@ async function owExportMulticanal() {
   const nCh   = window.owWamSpat?.P ?? 2;
   const SR    = 48000;
   const status = document.getElementById('spFaustStatus');
+  owSaveSectionCurves();  // flush owGainPoints/owTempoPoints → owGainBySection avant le parcours
   const savedSec = owActiveSec;
 
   if (status) status.textContent = 'Export multicanal : analyse…';
