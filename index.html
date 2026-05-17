@@ -2148,7 +2148,7 @@ function owComputeGrpObjets(grp) {
   }
   grp.owTableObjets = objs;
   owTableObjets[grp.id] = objs;
-  console.log('[owTableObjets] grp', grp.id, '(' + (grp.name||'') + ')', objs.map(o => (o.file||'?') + ' → ' + o.id + '.wav'));
+  console.log('[owTableObjets] grp', grp.id, '(' + (grp.name||'') + ')', objs.map(o => (o.file||'?') + ' → ' + (o._origId ?? o.id) + '.wav'));
   return objs;
 }
 
@@ -2225,7 +2225,7 @@ async function owMiseANiveauAudio(grp) {
 
   let count = 0;
   for (const newObj of newObjs) {
-    const origObj = origObjs.find(o => o.id === newObj.id);
+    const origObj = origObjs.find(o => o.id === (newObj._origId ?? newObj.id));
     if (!origObj) continue;
     if (origObj.flagTranspo === 0) continue;
 
@@ -3449,7 +3449,8 @@ async function owStartAudio() {
       const delay   = objTime - barTime;
       if (delay < -0.05) continue;
 
-      const filename = obj.id + '.wav';
+      const fileId   = obj._origId ?? obj.id;
+      const filename = fileId + '.wav';
       const absPath  = await window.api?.resolveAudioPath?.(owFilePath, filename);
       if (!absPath) continue;
 
