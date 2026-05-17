@@ -402,20 +402,23 @@ ipcMain.on('toMain', (event, args) => {
     case 'interpLoadGrp': {
       const p1      = rest.indexOf(';');
       const p2      = p1 > -1 ? rest.indexOf(';', p1 + 1) : -1;
+      const p3      = p2 > -1 ? rest.indexOf(';', p2 + 1) : -1;
       const grpId   = p1 > -1 ? rest.substring(0, p1) : rest;
       const grpName = p1 > -1 ? (p2 > -1 ? rest.substring(p1 + 1, p2) : rest.substring(p1 + 1)) : '';
-      const grpDir  = p2 > -1 ? rest.substring(p2 + 1) : '';
+      const grpDir  = p2 > -1 ? (p3 > -1 ? rest.substring(p2 + 1, p3) : rest.substring(p2 + 1)) : '';
+      const srcDir  = p3 > -1 ? rest.substring(p3 + 1) : '';
       if (!grpName) break;
       const candidates = [];
       if (grpDir) candidates.push(path.join(grpDir, grpName));
-      if (interpCurrentDir) candidates.push(path.join(interpCurrentDir, 'Groupes', grpName));
-      let xmlFound = null;
+      if (srcDir) candidates.push(path.join(srcDir, 'Groupes', grpName));
+      if (interpCurrentDir && interpCurrentDir !== srcDir) candidates.push(path.join(interpCurrentDir, 'Groupes', grpName));
+      let xmlFound = null, foundDir = '';
       for (const f of candidates) {
-        try { xmlFound = fs.readFileSync(f, 'utf-8'); break; }
+        try { xmlFound = fs.readFileSync(f, 'utf-8'); foundDir = path.dirname(path.dirname(f)); break; }
         catch(e) {}
       }
       if (!xmlFound) break;
-      const imgDir = interpCurrentDir ? path.join(interpCurrentDir, 'Images') : (grpDir || '');
+      const imgDir = foundDir ? path.join(foundDir, 'Images') : (interpCurrentDir ? path.join(interpCurrentDir, 'Images') : '');
       const b64 = Buffer.from(xmlFound, 'utf-8').toString('base64');
       win.webContents.send('fromMain', 'interpGrpLoaded;' + grpId + ';' + imgDir + ';' + b64);
       break;

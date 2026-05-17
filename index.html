@@ -878,6 +878,7 @@ let owNextObjGlobalId = 0;  // compteur global d'IDs d'objets audio, unique sur 
 let owActiveGrp  = null;
 let owFilePath   = null;
 let owImagesDir  = '';
+let owSrcDir     = '';   // répertoire source d'où la partition a été chargée (≠ owFilePath après SaveAs)
 let interpGrpData = {};   // {grpId: {xml, imgBase}} — cache XMLs de groupe
 let owTableObjets = {};  // {grpId: [{posX,posY,...}]} — objets audio transformés par groupe
 let owModified   = false;
@@ -969,7 +970,7 @@ function owNouveau() {
   if (owModified && !confirm('Nouveau projet ? Les modifications non sauvegardées seront perdues.')) return;
   owSections = []; owGroups = []; owNuanceInsts = [];
   owNextSecId = 1; owNextGrpId = 1; owNextNuInstId = 1; owNextObjGlobalId = 0;
-  owActiveGrp = null; owActiveSec = null; owFilePath = null; owSetModified(false);
+  owActiveGrp = null; owActiveSec = null; owFilePath = null; owSrcDir = ''; owSetModified(false);
   interpGrpData = {};
   owTempoBySection = {}; owGainBySection = {}; owNuanceInstsBySection = {};
   owTempoPoints = []; owGainPoints = []; owNbTempo = 1; owNbGain = 1;
@@ -1154,7 +1155,7 @@ function owParseData(txt, label) {
     // Charger les XMLs de groupe pour drawObjets
     if (typeof window.api !== 'undefined') {
       owGroups.forEach(grp => {
-        if (grp.name) window.api.send('toMain', `interpLoadGrp;${grp.id};${grp.name};${grp.dir||''}`);
+        if (grp.name) window.api.send('toMain', `interpLoadGrp;${grp.id};${grp.name};${grp.dir||''};${owSrcDir}`);
       });
     }
   } catch(err) { alert('Erreur de chargement : ' + err.message); }
@@ -3689,7 +3690,8 @@ if (typeof window.api !== 'undefined') {
         const fp   = nl > -1 ? rest.substring(0, nl) : '';
         const xml  = nl > -1 ? rest.substring(nl + 1) : rest;
         owFilePath  = fp;
-        owImagesDir = fp ? fp.replace(/[/\\][^/\\]*$/, '') + '/Images' : '';
+        owSrcDir    = fp ? fp.replace(/[/\\][^/\\]*$/, '') : '';
+        owImagesDir = owSrcDir ? owSrcDir + '/Images' : '';
         owNextObjGlobalId = 0;
         owParseData(xml, fp.split(/[\\/]/).at(-1) || 'partition.xml');
         break;
