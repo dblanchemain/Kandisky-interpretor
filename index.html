@@ -3810,16 +3810,19 @@ async function owStartAudio() {
       const tempoRatio = (!processed && grp.variationTempo) ? owTempoAtPx(objPx) : 1.0;
       const gainEnv    = (!processed && grp.variationIntensite)
         ? owExtractGainEnvelope(objPx, obj.duree) : null;
+      console.log(`[Gain DBG] obj=${obj.id} gain=${obj.gain} processed=${processed} vol=${vol} gainEnv=${gainEnv?JSON.stringify(gainEnv.slice(0,3))+'…':null} file=${absPath.split('/').slice(-2).join('/')}`);
       const waitMs = Math.max(0, Math.round(delay * 1000) - (Date.now() - t0));
       const vid    = String(obj.id);
       _owPendingVoices++;
-      _owPlayTimers.push(setTimeout(() => owAudioSend({
+      const _playCmd = {
         cmd: 'play', id: vid, file: absPath,
         ...(Math.abs(vol - 1) > 1e-4         ? { vol }                   : {}),
         ...(Math.abs(tempoRatio - 1) > 1e-4  ? { tempo_ratio: tempoRatio } : {}),
         ...(gainEnv                           ? { gain_env: gainEnv }     : {}),
         notify_end: true
-      }), waitMs));
+      };
+      console.log('[Gain DBG] play cmd:', JSON.stringify(_playCmd).slice(0, 200));
+      _owPlayTimers.push(setTimeout(() => owAudioSend(_playCmd), waitMs));
       count++;
     }
   }
