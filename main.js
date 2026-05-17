@@ -319,7 +319,9 @@ function findFreePort(start) {
 }
 
 function spawnAudioServer() {
-  const pyScript = path.join(__dirname, 'audio_server.py');
+  const pyScript = app.isPackaged
+    ? path.join(process.resourcesPath, 'audio_server.py')
+    : path.join(__dirname, 'audio_server.py');
   if (!fs.existsSync(pyScript)) {
     console.warn('[AudioServer] audio_server.py introuvable');
     return;
