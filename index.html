@@ -222,7 +222,7 @@
       width: 56px;
       height: 18px;
       overflow: visible;
-      cursor: ew-resize;
+      cursor: move;
       z-index: 2;
       pointer-events: all;
     }
@@ -1824,24 +1824,28 @@ function owMakeNuanceInstEl(inst) {
   space.appendChild(div);
 }
 
-/* ── Drag X-only : déplace l'instance et son point de gain ── */
+/* ── Drag X+Y : déplace l'instance (et le point de gain en X) ── */
 function owDragNuanceInst(el, inst, startEvt) {
   const startX  = startEvt.clientX;
+  const startY  = startEvt.clientY;
   const startPX = inst.posX;
+  const startPY = inst.posY;
   let dragged = false;
 
   document.onmousemove = function(e) {
-    const delta = (e.clientX - startX) / owZoomScale;
-    if (!dragged && Math.abs(delta) > 2) dragged = true;
+    const dx = (e.clientX - startX) / owZoomScale;
+    const dy = (e.clientY - startY);
+    if (!dragged && (Math.abs(dx) > 2 || Math.abs(dy) > 2)) dragged = true;
     if (!dragged) return;
-    inst.posX = Math.max(0, Math.round(startPX + delta));
+    inst.posX = Math.max(0, Math.round(startPX + dx));
+    inst.posY = Math.max(0, Math.round(startPY + dy));
     el.style.left = inst.posX + 'px';
-    /* Mettre à jour le point de gain */
+    el.style.top  = inst.posY + 'px';
+    /* Mettre à jour le point de gain (X seulement) */
     const gp = owGainPoints.find(p => p.id === inst.gainPtId);
     if (gp) {
       gp.X = inst.posX;
       owGainPoints.sort((a, b) => a.X - b.X);
-      /* Repositionner l'élément DOM du point */
       const gpEl = document.getElementById(inst.gainPtId);
       if (gpEl) gpEl.style.left = (gp.X - 3) + 'px';
       owDrawGain();
