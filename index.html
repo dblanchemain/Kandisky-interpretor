@@ -227,6 +227,7 @@
       pointer-events: all;
     }
     .ow-nuinst svg { display: block; overflow: visible; }
+    .ow-nuinst.actif { outline: 1px solid #2373b2; border-radius: 2px; }
 
     /* ── Bandeau Tempo / Gain ── */
     #owTempoBar {
@@ -909,6 +910,7 @@ let owNextNuInstId = 1;
 let owTempoBySection       = {};  // secId → {points:[{id,X,Y}], nb:N}
 let owGainBySection        = {};  // secId → {points:[{id,X,Y}], nb:N}
 let owNuanceInstsBySection = {};  // secId → [{id,nom,posX,posY,gainPtId}]
+let owActiveNuInst = null;        // instance de nuance sélectionnée
 
 // ═══════════════════════════════════════════════
 //  GLYPHES DE NUANCES (extraits de kandiskyScore)
@@ -1780,6 +1782,21 @@ function owNuGlyphSvg(nom) {
     '<g fill="#111" stroke="#111">' + glyph + '</g></svg>';
 }
 
+/* ── Supprime une instance de nuance et son point de gain ── */
+function owDeleteNuanceInst(inst, div) {
+  owNuanceInsts = owNuanceInsts.filter(i => i.id !== inst.id);
+  const gpIdx = owGainPoints.findIndex(p => p.id === inst.gainPtId);
+  if (gpIdx !== -1) {
+    const gpEl = document.getElementById(inst.gainPtId);
+    if (gpEl) gpEl.remove();
+    owGainPoints.splice(gpIdx, 1);
+    owDrawGain();
+  }
+  div.remove();
+  if (owActiveNuInst === inst) owActiveNuInst = null;
+  owSetModified(true);
+}
+
 /* ── Crée l'élément DOM d'une instance de nuance dans #space ── */
 function owMakeNuanceInstEl(inst) {
   const space = document.getElementById('space');
@@ -1790,22 +1807,19 @@ function owMakeNuanceInstEl(inst) {
   div.style.top  = inst.posY + 'px';
   div.innerHTML  = owNuGlyphSvg(inst.nom);
   div.title = inst.nom;
-  div.addEventListener('mousedown', e => { e.stopPropagation(); owDragNuanceInst(div, inst, e); });
+  div.addEventListener('mousedown', e => {
+    e.stopPropagation();
+    /* Sélectionner cette instance */
+    document.querySelectorAll('.ow-nuinst.actif').forEach(el => el.classList.remove('actif'));
+    div.classList.add('actif');
+    owActiveNuInst = inst;
+    owDragNuanceInst(div, inst, e);
+  });
   /* Clic droit : supprimer */
   div.addEventListener('contextmenu', e => {
     e.preventDefault();
     e.stopPropagation();
-    owNuanceInsts = owNuanceInsts.filter(i => i.id !== inst.id);
-    /* Supprimer le point de gain associé si présent */
-    const gpIdx = owGainPoints.findIndex(p => p.id === inst.gainPtId);
-    if (gpIdx !== -1) {
-      const gpEl = document.getElementById(inst.gainPtId);
-      if (gpEl) gpEl.remove();
-      owGainPoints.splice(gpIdx, 1);
-      owDrawGain();
-    }
-    div.remove();
-    owSetModified(true);
+    owDeleteNuanceInst(inst, div);
   });
   space.appendChild(div);
 }
@@ -3301,6 +3315,11 @@ function owSpaceClick(e) {
     document.querySelectorAll('.ow-grp').forEach(el => el.classList.remove('actif'));
     owUpdateInfo();
   }
+  /* Désélectionner la nuance active si clic hors d'une nuance */
+  if (!e.target.closest('.ow-nuinst')) {
+    document.querySelectorAll('.ow-nuinst.actif').forEach(el => el.classList.remove('actif'));
+    owActiveNuInst = null;
+  }
 }
 
 // ═══════════════════════════════════════════════
@@ -4110,6 +4129,10 @@ document.addEventListener('keydown', function(e) {
   if (e.ctrlKey && e.key === 's') {
     e.preventDefault();
     if (e.shiftKey) owSauvegarderSous(); else owSauvegarder();
+  }
+  if (e.key === 'Delete' && owActiveNuInst) {
+    const div = document.getElementById('nuinst' + owActiveNuInst.id);
+    if (div) owDeleteNuanceInst(owActiveNuInst, div);
   }
 });
 
