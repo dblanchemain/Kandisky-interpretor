@@ -910,6 +910,7 @@ let owNextNuInstId = 1;
 let owTempoBySection       = {};  // secId → {points:[{id,X,Y}], nb:N}
 let owGainBySection        = {};  // secId → {points:[{id,X,Y}], nb:N}
 let owNuanceInstsBySection = {};  // secId → [{id,nom,posX,posY,gainPtId}]
+let owPermutationAutorisee = true; // attribut permutationAutorisee de <partition>
 let owActiveNuInst = null;        // instance de nuance sélectionnée
 
 // ═══════════════════════════════════════════════
@@ -979,7 +980,7 @@ function owNouveau() {
   if (owModified && !confirm('Nouveau projet ? Les modifications non sauvegardées seront perdues.')) return;
   owSections = []; owGroups = []; owNuanceInsts = [];
   owNextSecId = 1; owNextGrpId = 1; owNextNuInstId = 1; owNextObjGlobalId = 0;
-  owActiveGrp = null; owActiveSec = null; owFilePath = null; owSrcDir = ''; owIsOriginalFile = false; owSetModified(false);
+  owActiveGrp = null; owActiveSec = null; owFilePath = null; owSrcDir = ''; owIsOriginalFile = false; owPermutationAutorisee = true; owSetModified(false);
   interpGrpData = {};
   owTempoBySection = {}; owGainBySection = {}; owNuanceInstsBySection = {};
   owTempoPoints = []; owGainPoints = []; owNbTempo = 1; owNbGain = 1;
@@ -1015,6 +1016,9 @@ function owParseData(txt, label) {
     if (!root) throw new Error('Élément <openwork> introuvable');
     const b = v => v === 'true';
     const n = (v, def) => v != null && v !== '' ? parseFloat(v) : def;
+    const partEl = root.querySelector('partition');
+    const permAttr = partEl?.getAttribute('permutationAutorisee');
+    owPermutationAutorisee = permAttr === null || permAttr === 'true';
     owSections = [];
     owGroups   = [];
     let secId  = 1;
@@ -1403,6 +1407,7 @@ function owEtatProjet() {
 
 function owPermuter() {
   owCloseMenus();
+  if (!owPermutationAutorisee) { alert('La permutation des sections n\'est pas autorisée dans cette partition.'); return; }
   if (owSections.length < 2) { alert('Il faut au moins deux sections.'); return; }
   const sorted = [...owSections].sort((a,b) => a.posY - b.posY);
   ['permSec1','permSec2'].forEach((selId, i) => {
