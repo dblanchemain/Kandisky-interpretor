@@ -1784,6 +1784,7 @@ function owNuGlyphSvg(nom) {
     return '<span style="font-style:italic;font-size:11px;color:#222">' + nom + '</span>';
   }
   return '<svg xmlns="http://www.w3.org/2000/svg" width="52" height="16" viewBox="0 0 40 14" overflow="visible">' +
+    '<rect width="40" height="14" fill="transparent" pointer-events="all"/>' +
     '<g fill="#111" stroke="#111">' + glyph + '</g></svg>';
 }
 
@@ -2009,6 +2010,8 @@ function owRenderGroups() {
       drawObjets(xml, div, imgBase);
     }
   });
+  /* Les nuances doivent toujours être au-dessus des groupes dans le DOM */
+  document.querySelectorAll('.ow-nuinst').forEach(el => space.appendChild(el));
 }
 
 function owDirLabel(dir) {
