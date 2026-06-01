@@ -1070,7 +1070,7 @@ function owParseData(txt, label) {
           posRelFinAvant:     g.getAttribute('posRelFinAvant')    || '',
           posRelFinGroupe:    g.getAttribute('posRelFinGroupe')   || '',
           dir: g.getAttribute('dir') || '',
-          posTemp: g.getAttribute('posTemp') !== 'false'
+          positionTemporelle: g.getAttribute('positionTemporelle') !== 'false'
         });
       });
     });
@@ -1240,7 +1240,7 @@ function owSerialise() {
       xml += ` posRelDebut="${b(grp.posRelDebut)}" posRelDebutAvant="${x(grp.posRelDebutAvant)}" posRelDebutGroupe="${x(grp.posRelDebutGroupe)}"`;
       xml += ` posRelFin="${b(grp.posRelFin)}" posRelFinAvant="${x(grp.posRelFinAvant)}" posRelFinGroupe="${x(grp.posRelFinGroupe)}"`;
       xml += ` dir="${x(grp.dir || '')}"`;
-      xml += ` posTemp="${b(grp.posTemp !== false)}"`;
+      xml += ` positionTemporelle="${b(grp.positionTemporelle !== false)}"`;
       xml += ` posX="${grp.posX}" posY="${grp.posY}" w="${grp.w}" h="${grp.h}" color="${x(grp.color)}" opacity="${grp.opacity}"/>\n`;
     });
     xml += `    </section>\n`;
@@ -1457,7 +1457,7 @@ function owAjouterGroupe() {
     sectionId: sec.id,
     posX: 20, posY: sec.posY + 20,
     w: 120, h: 60,
-    color: '#c8dcff', opacity: 0.5, nuance: '', transposition: true, posTemp: true
+    color: '#c8dcff', opacity: 0.5, nuance: '', transposition: true, positionTemporelle: true
   };
   owGroups.push(grp);
   owActiveGrp = grp.id;
@@ -2030,7 +2030,7 @@ function owApplyGrpStyle(el, grp) {
   el.style.height          = grp.h + 'px';
   el.style.borderColor     = grp.color || '#4a90d9';
   el.style.backgroundColor = owHexRgba(grp.color || '#c8dcff', grp.opacity ?? 0.45);
-  el.style.cursor          = grp.posTemp !== false ? 'move' : 'default';
+  el.style.cursor          = grp.positionTemporelle !== false ? 'move' : 'default';
   const lbl = el.querySelector('.ow-grp-lbl');
   if (lbl) lbl.textContent = grp.name;
   const trig = el.querySelector('.ow-grp-trigger');
@@ -3274,7 +3274,7 @@ function owShowGrpInfo(grp) {
     null,
     ['Répétition',       b(grp.repetition) + (grp.repetition ? '  max ' + grp.repetitionMax : '')],
     ['Transposition',    b(grp.transposition)],
-    ['Position temporelle', b(grp.posTemp !== false)],
+    ['Position temporelle', b(grp.positionTemporelle !== false)],
     null,
     ['Augm./dim.',       b(grp.augDim) + (grp.augDim ? '  [' + grp.augDimMin + ', ' + grp.augDimMax + ']' : '')],
     ['Expansion',        b(grp.expansion) + (grp.expansion ? '  [' + grp.expansionMin + ', ' + grp.expansionMax + ']' : '')],
@@ -3367,7 +3367,7 @@ function owApplyPosConstraints(grp) {
 }
 
 function owDragElement(elmnt, grpData, startEvt) {
-  if (grpData.posTemp === false) return;
+  if (grpData.positionTemporelle === false) return;
   let p1=0, p2=0, p3=startEvt.clientX, p4=startEvt.clientY;
   const sx = startEvt.clientX, sy = startEvt.clientY;
   let dragged = false;
