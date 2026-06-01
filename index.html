@@ -627,6 +627,8 @@
         <tr><td>Transposition :</td>
             <td><button id="gpTransposition" onclick="owUpdateGrp('transposition')"
                 style="width:80px;font-weight:bold;">Oui</button></td></tr>
+        <tr><td>Position temporelle :</td>
+            <td><input id="gpPosTemp" type="checkbox" onchange="owUpdateGrp('posTemp')"/></td></tr>
       </tbody>
     </table>
   </div>
@@ -1068,7 +1070,8 @@ function owParseData(txt, label) {
           posRelFin:          b(g.getAttribute('posRelFin')),
           posRelFinAvant:     g.getAttribute('posRelFinAvant')    || '',
           posRelFinGroupe:    g.getAttribute('posRelFinGroupe')   || '',
-          dir: g.getAttribute('dir') || ''
+          dir: g.getAttribute('dir') || '',
+          posTemp: g.getAttribute('posTemp') !== 'false'
         });
       });
     });
@@ -1238,6 +1241,7 @@ function owSerialise() {
       xml += ` posRelDebut="${b(grp.posRelDebut)}" posRelDebutAvant="${x(grp.posRelDebutAvant)}" posRelDebutGroupe="${x(grp.posRelDebutGroupe)}"`;
       xml += ` posRelFin="${b(grp.posRelFin)}" posRelFinAvant="${x(grp.posRelFinAvant)}" posRelFinGroupe="${x(grp.posRelFinGroupe)}"`;
       xml += ` dir="${x(grp.dir || '')}"`;
+      xml += ` posTemp="${b(grp.posTemp !== false)}"`;
       xml += ` posX="${grp.posX}" posY="${grp.posY}" w="${grp.w}" h="${grp.h}" color="${x(grp.color)}" opacity="${grp.opacity}"/>\n`;
     });
     xml += `    </section>\n`;
@@ -1454,7 +1458,7 @@ function owAjouterGroupe() {
     sectionId: sec.id,
     posX: 20, posY: sec.posY + 20,
     w: 120, h: 60,
-    color: '#c8dcff', opacity: 0.5, nuance: '', transposition: true
+    color: '#c8dcff', opacity: 0.5, nuance: '', transposition: true, posTemp: true
   };
   owGroups.push(grp);
   owActiveGrp = grp.id;
@@ -1490,6 +1494,7 @@ function owParamsGroupe() {
   const btnT = document.getElementById('gpTransposition');
   btnT.textContent = transp ? 'Oui' : 'Non';
   btnT.style.background = transp ? '#b8e4b8' : '#f0c0c0';
+  document.getElementById('gpPosTemp').checked = grp.posTemp !== false;
   // Reconstruire le select nuances
   const sel = document.getElementById('gpNuance');
   sel.innerHTML = '<option value="">—</option>';
@@ -1519,6 +1524,12 @@ function owUpdateGrp(param) {
       const btn = document.getElementById('gpTransposition');
       btn.textContent = grp.transposition ? 'Oui' : 'Non';
       btn.style.background = grp.transposition ? '#b8e4b8' : '#f0c0c0';
+      break;
+    }
+    case 'posTemp': {
+      grp.posTemp = document.getElementById('gpPosTemp').checked;
+      const el = document.getElementById('grp' + grp.id);
+      if (el) el.style.cursor = grp.posTemp ? 'move' : 'default';
       break;
     }
   }
@@ -2026,6 +2037,7 @@ function owApplyGrpStyle(el, grp) {
   el.style.height          = grp.h + 'px';
   el.style.borderColor     = grp.color || '#4a90d9';
   el.style.backgroundColor = owHexRgba(grp.color || '#c8dcff', grp.opacity ?? 0.45);
+  el.style.cursor          = grp.posTemp !== false ? 'move' : 'default';
   const lbl = el.querySelector('.ow-grp-lbl');
   if (lbl) lbl.textContent = grp.name;
   const trig = el.querySelector('.ow-grp-trigger');
@@ -3361,6 +3373,7 @@ function owApplyPosConstraints(grp) {
 }
 
 function owDragElement(elmnt, grpData, startEvt) {
+  if (grpData.posTemp === false) return;
   let p1=0, p2=0, p3=startEvt.clientX, p4=startEvt.clientY;
   const sx = startEvt.clientX, sy = startEvt.clientY;
   let dragged = false;
