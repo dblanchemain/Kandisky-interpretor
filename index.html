@@ -3274,6 +3274,7 @@ function owShowGrpInfo(grp) {
     null,
     ['Répétition',       b(grp.repetition) + (grp.repetition ? '  max ' + grp.repetitionMax : '')],
     ['Transposition',    b(grp.transposition)],
+    ['Position temporelle', b(grp.posTemp !== false)],
     null,
     ['Augm./dim.',       b(grp.augDim) + (grp.augDim ? '  [' + grp.augDimMin + ', ' + grp.augDimMax + ']' : '')],
     ['Expansion',        b(grp.expansion) + (grp.expansion ? '  [' + grp.expansionMin + ', ' + grp.expansionMax + ']' : '')],
@@ -3309,27 +3310,6 @@ function owShowGrpInfo(grp) {
     tbl.appendChild(tr);
   });
   content.appendChild(tbl);
-
-  /* Checkbox interactive Position temporelle */
-  const posTempRow = document.createElement('div');
-  posTempRow.style.cssText = 'display:flex;align-items:center;gap:6px;margin-top:8px;border-top:1px solid #ddd;padding-top:6px;';
-  const cbSpan = document.createElement('span');
-  cbSpan.style.cssText = 'color:#666;';
-  cbSpan.textContent = 'Position temporelle :';
-  const cb = document.createElement('input');
-  cb.type = 'checkbox';
-  cb.id   = 'grpInfoPosTemp';
-  cb.checked = grp.posTemp !== false;
-  cb.addEventListener('change', () => {
-    grp.posTemp = cb.checked;
-    const el = document.getElementById('grp' + grp.id);
-    if (el) el.style.cursor = grp.posTemp ? 'move' : 'default';
-    owSetModified(true);
-  });
-  posTempRow.appendChild(cbSpan);
-  posTempRow.appendChild(cb);
-  content.appendChild(posTempRow);
-
   document.getElementById('grpInfoPopup').style.display = 'block';
 }
 
