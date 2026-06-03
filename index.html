@@ -2956,7 +2956,7 @@ function buildSymbolSvg(o) {
   }
   if (o.type === 21) {
     const nb2 = Math.floor(Math.hypot(o.bkgWidth, o.bkgHeight) / 4.9222416);
-    return `<g stroke="${o.objColor}" style="stroke-width:0.264583"><path d="m 2,0 l 0,${nb2*5}" stroke="${o.objColor}" stroke-width="2"/></g>`;
+    return `<g stroke="${o.objColor}" fill="${o.objColor}" transform="rotate(${o.rotate||0},0,0) scale(1,${o.scaleY2||o.scaleY||1})" style="stroke-width:0.264583"><path d="m 2,0 l 0,${nb2*5}" stroke="${o.objColor}" stroke-width="2"/></g>`;
   }
   if (o.type === 22) {
     const nb2 = Math.floor(Math.hypot(o.bkgWidth, o.bkgHeight) / 4.9222416);
@@ -3029,32 +3029,51 @@ function buildSymbolSvg(o) {
     return `<g fill="${o.objColor}" stroke="${o.objColor}" stroke-width="${o.objBorderW||1}" transform="matrix(${ma},${mb},${mc},${md},${me},${mf})">${glyph20}</g>`;
   }
 
-  // Types 56-59, 63-64 : symboles à largeur dynamique lx = 47*(scaleY2+scaleX)
+  // Types 56-59, 63-64 : rendu basé sur x2/y2 (angle = atan2, dist = hypot)
   if (o.type === 56 || o.type === 57 || o.type === 58 || o.type === 59 || o.type === 63 || o.type === 64) {
-    const sx = o.scaleX || 1;
-    const lx = 47 * ((o.scaleY2 || o.scaleY || 1) + sx);
-    const sc = `scale(${sx} ${sx}) translate(${o.margeG} ${o.margeH}) rotate(${o.rotate||0} 0 0)`;
+    const x2 = isFinite(o.x2) ? o.x2 : 94;
+    const y2 = isFinite(o.y2) ? o.y2 : 0;
+    const dist = Math.hypot(x2, y2) || 94;
+    const angle = Math.atan2(y2, x2) * 180 / Math.PI;
     const col = o.objColor;
-    const ARR_R = `<path fill="${col}" d="M 47,8 L 47,8 40,4 40,12 47,8" transform="translate(${lx-51} 0)"/>`;
-    const ARR_L = `<path fill="${col}" d="M 15,8 L 15,8 22,4 22,12 15,8"/>`;
-    const NOTE  = `<g transform="translate(${lx/2} 0) scale(6 6)"><path style="fill:none;stroke-width:0.1;stroke:#000000" d="m 0.87037671,1.9635921 c -0.06468,-0.07449 -0.352828,-0.03968 -0.394197,-0.574872 0.01372,-0.70638403 0.55035799,-0.74558403 0.62098599,-0.73461103 0.590522,0.07128 0.670251,0.60724103 0.524974,1.05662603 -0.136678,0.396526 -0.545612,0.461145 -0.545612,0.461145"/><path style="fill:#000000;stroke-width:0.0500108px" transform="translate(0.14 0.56) rotate(-30)" d="M 0,1.8 L 0,1.8 0.4,1.5 0.4,2.2 0,1.8"/></g>`;
-    const C1 = `<circle fill="#ffffff" stroke="${col}" stroke-width="0.6" cx="8" cy="8" r="7"/>`;
-    const C2 = `<circle fill="#ffffff" stroke="${col}" stroke-width="0.6" cx="${lx}" cy="8" r="7"/>`;
-    const LN = `<line stroke="${col}" stroke-width="0.6" x1="15" y1="8" x2="${lx-8}" y2="8"/>`;
-    const BRACE_R = `<line stroke="${col}" stroke-width="0.8" x1="0" y1="24" x2="0" y2="8"/><line stroke="${col}" stroke-width="0.8" x1="0" y1="16" x2="${lx}" y2="16"/><line stroke="${col}" stroke-width="0.8" x1="${lx}" y1="8" x2="${lx}" y2="24"/>`;
-    const BRACE_L = `<line stroke="${col}" stroke-width="0.8" x1="8" y1="24" x2="8" y2="8"/><line stroke="${col}" stroke-width="0.8" x1="0" y1="16" x2="${lx}" y2="16"/><line stroke="${col}" stroke-width="0.8" x1="${lx}" y1="8" x2="${lx}" y2="24"/>`;
-    const ARR_BR = `<path fill="${col}" d="M 1,16 L 1,16 8,12 8,20 1,16"/>`;
-    const ARR_BL = `<path fill="${col}" d="M 0,12 L 0,12 0,20 7,16 0,12"/>`;
-    const ARR_BR2 = `<path fill="${col}" d="M 46,16 L 46,16 39,12 39,20 46,16" transform="translate(${lx-47} 0)"/>`;
-    const ARR_BL2 = `<path fill="${col}" d="M 47,16 L 47,16 54,12 54,20 47,16" transform="translate(${lx-47} 0)"/>`;
+    const NOTE = `<g transform="translate(${dist/2},-8) scale(6,6)"><path style="fill:none;stroke-width:0.1;stroke:${col}" d="m 0.87037671,1.9635921 c -0.06468,-0.07449 -0.352828,-0.03968 -0.394197,-0.574872 0.01372,-0.70638403 0.55035799,-0.74558403 0.62098599,-0.73461103 0.590522,0.07128 0.670251,0.60724103 0.524974,1.05662603 -0.136678,0.396526 -0.545612,0.461145 -0.545612,0.461145"/><path style="fill:${col};stroke-width:0.0500108px" transform="translate(0.14 0.56) rotate(-30)" d="M 0,1.8 L 0,1.8 0.4,1.5 0.4,2.2 0,1.8"/></g>`;
     let inner = '';
-    if (o.type === 56) inner = `${C1}${C2}${LN}${ARR_R}`;
-    else if (o.type === 57) inner = `${C1}${C2}${LN}${ARR_L}`;
-    else if (o.type === 58) inner = `${C1}${C2}${LN}${ARR_R}${NOTE}`;
-    else if (o.type === 59) inner = `${C1}${C2}${LN}${ARR_L}${NOTE}`;
-    else if (o.type === 63) inner = `<g transform="translate(0 -8)">${BRACE_R}${ARR_BR}${ARR_BR2}</g>`;
-    else if (o.type === 64) inner = `<g transform="translate(0 -8)">${BRACE_L}${ARR_BL}${ARR_BL2}</g>`;
-    return `<g transform="${sc}" fill="${col}" stroke="${col}">${inner}</g>`;
+    if (o.type === 56) {
+      inner = `<circle fill="#ffffff" stroke="${col}" fill-opacity="1" stroke-width="0.6" cx="0" cy="0" r="7"/>` +
+              `<circle fill="#ffffff" stroke="${col}" fill-opacity="1" stroke-width="0.6" cx="${dist}" cy="0" r="7"/>` +
+              `<line stroke="${col}" stroke-width="0.6" x1="7" y1="0" x2="${dist-7}" y2="0"/>` +
+              `<path style="fill:${col};stroke-width:0.50;stroke-opacity:1" d="M ${dist-4},0 L ${dist-11},-4 ${dist-11},4 Z"/>`;
+    } else if (o.type === 57) {
+      inner = `<circle fill="#ffffff" stroke="${col}" fill-opacity="1" stroke-width="0.6" cx="0" cy="0" r="7"/>` +
+              `<circle fill="#ffffff" stroke="${col}" fill-opacity="1" stroke-width="0.6" cx="${dist}" cy="0" r="7"/>` +
+              `<line stroke="${col}" stroke-width="0.6" x1="7" y1="0" x2="${dist-7}" y2="0"/>` +
+              `<path style="fill:${col};stroke-width:0.50;stroke-opacity:1" d="M 4,0 L 11,-4 11,4 Z"/>`;
+    } else if (o.type === 58) {
+      inner = `<circle fill="#ffffff" stroke="${col}" fill-opacity="1" stroke-width="0.6" cx="0" cy="0" r="7"/>` +
+              `<circle fill="#ffffff" stroke="${col}" fill-opacity="1" stroke-width="0.6" cx="${dist}" cy="0" r="7"/>` +
+              `<line stroke="${col}" stroke-width="0.6" x1="7" y1="0" x2="${dist-7}" y2="0"/>` +
+              `<path style="fill:${col};stroke-width:0.50;stroke-opacity:1" d="M ${dist-4},0 L ${dist-11},-4 ${dist-11},4 Z"/>` +
+              NOTE;
+    } else if (o.type === 59) {
+      inner = `<circle fill="#ffffff" stroke="${col}" fill-opacity="1" stroke-width="0.6" cx="0" cy="0" r="7"/>` +
+              `<circle fill="#ffffff" stroke="${col}" fill-opacity="1" stroke-width="0.6" cx="${dist}" cy="0" r="7"/>` +
+              `<line stroke="${col}" stroke-width="0.6" x1="7" y1="0" x2="${dist-7}" y2="0"/>` +
+              `<path style="fill:${col};stroke-width:0.50;stroke-opacity:1" d="M 4,0 L 11,-4 11,4 Z"/>` +
+              NOTE;
+    } else if (o.type === 63) {
+      inner = `<line stroke="${col}" stroke-width="0.80" fill="none" x1="0" y1="-8" x2="0" y2="8"/>` +
+              `<line stroke="${col}" stroke-width="0.80" fill="none" x1="0" y1="0" x2="${dist}" y2="0"/>` +
+              `<line stroke="${col}" stroke-width="0.80" fill="none" x1="${dist}" y1="-8" x2="${dist}" y2="8"/>` +
+              `<path style="fill:${col};stroke-width:0.50;stroke-opacity:1" d="M 1,0 L 8,-4 8,4 Z"/>` +
+              `<path style="fill:${col};stroke-width:0.50;stroke-opacity:1" d="M ${dist-1},0 L ${dist-8},-4 ${dist-8},4 Z"/>`;
+    } else if (o.type === 64) {
+      inner = `<line stroke="${col}" stroke-width="0.80" fill="none" x1="8" y1="-8" x2="8" y2="8"/>` +
+              `<line stroke="${col}" stroke-width="0.80" fill="none" x1="0" y1="0" x2="${dist}" y2="0"/>` +
+              `<line stroke="${col}" stroke-width="0.80" fill="none" x1="${dist}" y1="-8" x2="${dist}" y2="8"/>` +
+              `<path style="fill:${col};stroke-width:0.50;stroke-opacity:1" d="M 7,0 L 0,-4 0,4 Z"/>` +
+              `<path style="fill:${col};stroke-width:0.50;stroke-opacity:1" d="M ${dist},0 L ${dist+7},-4 ${dist+7},4 Z"/>`;
+    }
+    return `<g stroke="${col}" fill="${col}" transform="rotate(${angle} 0 0)" style="stroke-width:0.264583">${inner}</g>`;
   }
 
   // Types 69-73 : flèches en L avec lx = 53*(scaleY2+scaleX)
