@@ -2384,7 +2384,11 @@ async function owExportMulticanal() {
 
   for (const sec of [...owSections].sort((a, b) => a.posY - b.posY)) {
     owLoadSectionCurves(sec.id);
-    const grps = owGroups.filter(g => g.sectionId === sec.id && g.owTableObjets?.length);
+    const grps = owGroups.filter(g => {
+      if (g.sectionId !== sec.id) return false;
+      if (!g.owTableObjets && interpGrpData[g.id]) owComputeGrpObjets(g);
+      return g.owTableObjets?.length;
+    });
     for (const grp of grps) {
       const parsed = owParseGrpXml(grp.id);
       if (!parsed) continue;
@@ -2399,9 +2403,10 @@ async function owExportMulticanal() {
         const filename  = fileId + '.wav';
         if (status) status.textContent = `Export: lecture ${filename}…`;
 
-        let raw;
-        try { raw = await window.api.readAudioFile(owFilePath, 'interprete/' + filename); }
-        catch { try { raw = await window.api.readAudioFile(owFilePath, filename); } catch { continue; } }
+        // readAudioFile retourne null (sans lever d'exception) si le fichier est absent
+        let raw = await window.api.readAudioFile(owFilePath, 'interprete/' + filename);
+        if (!raw) raw = await window.api.readAudioFile(owFilePath, filename);
+        if (!raw) continue;
 
         let audioBuf;
         try {
