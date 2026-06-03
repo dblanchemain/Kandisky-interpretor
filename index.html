@@ -2130,7 +2130,7 @@ function owGrpCopier(grp) {
   if (!data) return;
   const parsed = owParseGrpXml(grp.id);
   if (!parsed) return;
-  const {ctn} = parsed;
+  const {ctn, zs} = parsed;
 
   // Mettre à jour les posX/posY dans le XML par matching d'ID
   const safeXml = data.xml.replace(/&(?!amp;|lt;|gt;|quot;|apos;|#\d+;|#x[\da-fA-F]+;)/g, '&amp;');
@@ -2149,18 +2149,18 @@ function owGrpCopier(grp) {
   }
 
   // Adapter le conteneur (class 4) : inclure les bornes du conteneur original
-  // pour que sx = grp.w / ctnW conserve la même échelle que le groupe source
+  // posX/posY en unités score, bkgWidth/bkgHeight en pixels CSS (zs = facteur de conversion)
   const minX = Math.min(ctn.ctnX, ...objs.map(o => o.posX));
   const minY = Math.min(ctn.ctnY, ...objs.map(o => o.posY));
-  const maxX = Math.max(ctn.ctnX + ctn.ctnW, ...objs.map(o => o.posX + (o.bkgWidth  || 0)));
-  const maxY = Math.max(ctn.ctnY + ctn.ctnH, ...objs.map(o => o.posY + (o.bkgHeight || 0)));
+  const maxX = Math.max(ctn.ctnX + ctn.ctnW / zs, ...objs.map(o => o.posX + (o.bkgWidth  || 0) / zs));
+  const maxY = Math.max(ctn.ctnY + ctn.ctnH / zs, ...objs.map(o => o.posY + (o.bkgHeight || 0) / zs));
   const ctnEl = allEls.find(e => {
     const c = e.querySelector('class'); return c && parseInt(c.getAttribute('value')) === 4;
   });
   if (ctnEl) {
     setVal(ctnEl, 'posx', minX);      setVal(ctnEl, 'posy', minY);
-    setVal(ctnEl, 'bkgwidth',  maxX - minX);
-    setVal(ctnEl, 'bkgheight', maxY - minY);
+    setVal(ctnEl, 'bkgwidth',  (maxX - minX) * zs);
+    setVal(ctnEl, 'bkgheight', (maxY - minY) * zs);
   }
 
   const newXml = new XMLSerializer().serializeToString(doc);
@@ -2201,6 +2201,8 @@ function owParseGrpXml(grpId) {
   const safeXml = data.xml.replace(/&(?!amp;|lt;|gt;|quot;|apos;|#\d+;|#x[\da-fA-F]+;)/g, '&amp;');
   const doc = new DOMParser().parseFromString(safeXml, 'application/xml');
   if (doc.querySelector('parsererror')) return null;
+  const zsEl = doc.querySelector('zoomscale');
+  const zs = zsEl ? (parseFloat(zsEl.getAttribute('value')) || 1) : 1;
   let ctn = null;
   const audio = [];
   for (const el of doc.querySelectorAll('objet')) {
@@ -2210,7 +2212,7 @@ function owParseGrpXml(grpId) {
   }
   if (!ctn) return null;
   audio.sort((a, b) => a.posX - b.posX);
-  return {ctn, audio};
+  return {ctn, audio, zs};
 }
 
 function owTrDirect(objs)       { return objs.map(o => ({...o})); }
@@ -2392,10 +2394,10 @@ async function owExportMulticanal() {
     for (const grp of grps) {
       const parsed = owParseGrpXml(grp.id);
       if (!parsed) continue;
-      const { ctn } = parsed;
+      const { ctn, zs } = parsed;
       const sx0 = (grp._baseW !== undefined ? grp._baseW : grp.w) / ctn.ctnW;
       for (const obj of grp.owTableObjets) {
-        const objPx     = grp.posX + (obj.posX - ctn.ctnX) * sx0;
+        const objPx     = grp.posX + (obj.posX * zs - ctn.ctnX * zs) * sx0;
         const offsetSec = owScorePxToRealSec(0, objPx);
         const objDurSec = obj.duree > 0 ? obj.duree : (obj.bkgWidth * sx0) / OW_BASE_PX;
         const gainEnv   = grp.variationIntensite ? owExtractGainEnvelope(objPx, objDurSec) : null;
@@ -2581,7 +2583,7 @@ async function owMiseANiveauComplete(grp) {
   if (!owFilePath || !window.api?.readAudioFile) return;
   const parsed = owParseGrpXml(grp.id);
   if (!parsed) return;
-  const { ctn } = parsed;
+  const { ctn, zs } = parsed;
   const origObjs = parsed.audio;
   const newObjs  = grp.owTableObjets;
   if (!newObjs?.length) return;
@@ -2598,7 +2600,7 @@ async function owMiseANiveauComplete(grp) {
     if (status) status.textContent = `Traitement ${filename}…`;
 
     // 1. Transposition (les WAV de Audios/ sont déjà finalisés par kandiskyscore)
-    const objScorePx = grp.posX + (origObj.posX - ctn.ctnX) * sx0;
+    const objScorePx = grp.posX + (origObj.posX * zs - ctn.ctnX * zs) * sx0;
     let transpFactor = 1;
     if (grp.transposition && origObj.flagTranspo !== 0) {
       const origRef = owPitchRef(origObj);
@@ -2731,7 +2733,7 @@ function owDrawTransformOverlay(grp, grpDiv) {
 
   const parsed = owParseGrpXml(grp.id);
   if (!parsed) return;
-  const {ctn} = parsed;
+  const {ctn, zs} = parsed;
   const imgBase = interpGrpData[grp.id]?.imgBase || '';
 
   // Mémoriser les dimensions d'origine (avant tout redimensionnement par overlay)
@@ -2742,21 +2744,22 @@ function owDrawTransformOverlay(grp, grpDiv) {
   }
 
   // Toujours calculer l'échelle depuis les dimensions d'origine
+  // ctn.ctnW/ctnH sont en pixels CSS, sx0 = openWork_px / CSS_px
   const sx0 = grp._baseW / ctn.ctnW;
   const sy0 = grp._baseH / ctn.ctnH;
 
-  // Bornes effectives du contenu transformé
-  const minObjY = Math.min(...objs.map(o => o.posY));
-  const maxObjY = Math.max(...objs.map(o => o.posY + (o.bkgHeight || 0)));
-  const maxObjX = Math.max(...objs.map(o => o.posX + (o.bkgWidth  || 0)));
+  // Bornes effectives du contenu transformé (tout en pixels CSS via *zs)
+  const minObjY = Math.min(...objs.map(o => o.posY * zs));
+  const maxObjY = Math.max(...objs.map(o => o.posY * zs + (o.bkgHeight || 0)));
+  const maxObjX = Math.max(...objs.map(o => o.posX * zs + (o.bkgWidth  || 0)));
 
-  const effCtnY = Math.min(ctn.ctnY, minObjY);
-  const effCtnH = Math.max(ctn.ctnY + ctn.ctnH, maxObjY) - effCtnY;
-  const effCtnW = Math.max(ctn.ctnX + ctn.ctnW, maxObjX) - ctn.ctnX;
+  const effCtnY = Math.min(ctn.ctnY * zs, minObjY);
+  const effCtnH = Math.max(ctn.ctnY * zs + ctn.ctnH, maxObjY) - effCtnY;
+  const effCtnW = Math.max(ctn.ctnX * zs + ctn.ctnW, maxObjX) - ctn.ctnX * zs;
 
   const newH    = Math.round(effCtnH * sy0);
   const newW    = Math.round(effCtnW * sx0);
-  const newPosY = Math.round(grp._basePosY - (ctn.ctnY - effCtnY) * sy0);
+  const newPosY = Math.round(grp._basePosY - (ctn.ctnY * zs - effCtnY) * sy0);
 
   if (newH !== grp.h || newW !== grp.w || newPosY !== grp.posY) {
     grp.h    = newH;
@@ -2775,8 +2778,8 @@ function owDrawTransformOverlay(grp, grpDiv) {
       const op = Math.round(o.bkgOpacity * 255).toString(16).padStart(2, '0');
       bkg = `<rect x="0" y="0" width="${o.bkgWidth}" height="${o.bkgHeight}" fill="${o.bkgColor}${op}"/>`;
     }
-    const rx = (o.posX - ctn.ctnX)  * sx0;
-    const ry = (o.posY - effCtnY)   * sy0;
+    const rx = (o.posX * zs - ctn.ctnX * zs) * sx0;
+    const ry = (o.posY * zs - effCtnY)        * sy0;
     const w  = Math.max(1, o.bkgWidth  * sx0);
     const h  = Math.max(1, o.bkgHeight * sy0);
     const d  = document.createElement('div');
@@ -3163,6 +3166,8 @@ function drawObjets(grpXml, grpDiv, imgBasePath) {
   const safeXml = grpXml.replace(/&(?!amp;|lt;|gt;|quot;|apos;|#\d+;|#x[\da-fA-F]+;)/g, '&amp;');
   const doc    = parser.parseFromString(safeXml, 'application/xml');
   if (doc.querySelector('parsererror')) return;
+  const zsEl = doc.querySelector('zoomscale');
+  const zs   = zsEl ? (parseFloat(zsEl.getAttribute('value')) || 1) : 1;
   let ctnX=0, ctnY=0, ctnW=0, ctnH=0;
   for (const el of doc.querySelectorAll('objet')) {
     const clsEl = el.querySelector('class');
@@ -3190,8 +3195,8 @@ function drawObjets(grpXml, grpDiv, imgBasePath) {
       const op = Math.round(o.bkgOpacity*255).toString(16).padStart(2,'0');
       bkg = `<rect x="0" y="0" width="${o.bkgWidth}" height="${o.bkgHeight}" fill="${o.bkgColor}${op}"/>`;
     }
-    const rx = (o.posX - ctnX) * sx;
-    const ry = (o.posY - ctnY) * sy;
+    const rx = (o.posX * zs - ctnX * zs) * sx;
+    const ry = (o.posY * zs - ctnY * zs) * sy;
     const w  = Math.max(1, o.bkgWidth  * sx);
     const h  = Math.max(1, o.bkgHeight * sy);
     const div = document.createElement('div');
@@ -3559,7 +3564,7 @@ async function owApplyRubberbandTempo(grp) {
   if (!window.api?.processTempoNote)      return;
   const parsed = owParseGrpXml(grp.id);
   if (!parsed) return;
-  const { ctn } = parsed;
+  const { ctn, zs } = parsed;
   const sx0    = (grp._baseW !== undefined ? grp._baseW : grp.w) / ctn.ctnW;
   const status = document.getElementById('spFaustStatus');
   if (status) status.textContent = 'Tempo rubberband…';
@@ -3567,7 +3572,7 @@ async function owApplyRubberbandTempo(grp) {
   for (const obj of grp.owTableObjets) {
     if (!obj.duree) continue;
     const fileId  = obj._origId ?? obj.id;
-    const objPx   = grp.posX + (obj.posX - ctn.ctnX) * sx0;
+    const objPx   = grp.posX + (obj.posX * zs - ctn.ctnX * zs) * sx0;
     const map     = owBuildTempoMapForNote(objPx, obj.duree);
     // Inutile si tempo constant et unitaire
     const ys      = map.map(p => p.y);
@@ -4033,11 +4038,11 @@ async function owStartAudio() {
   for (const grp of grps) {
     const parsed = owParseGrpXml(grp.id);
     if (!parsed) continue;
-    const { ctn } = parsed;
+    const { ctn, zs } = parsed;
     const sx0 = (grp._baseW !== undefined ? grp._baseW : grp.w) / ctn.ctnW;
 
     for (const obj of grp.owTableObjets) {
-      const objPx  = grp.posX + (obj.posX - ctn.ctnX) * sx0;
+      const objPx  = grp.posX + (obj.posX * zs - ctn.ctnX * zs) * sx0;
       const delay  = owScorePxToRealSec(barScorePx, objPx);
       if (delay < -0.05) continue;
 
