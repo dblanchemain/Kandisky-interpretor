@@ -3221,10 +3221,27 @@ function drawObjets(grpXml, grpDiv, imgBasePath) {
     const div = document.createElement('div');
     div.className = 'ow-drawn-obj';
     div.dataset.objClass = o.class;
-    div.style.cssText = `position:absolute;left:${rx}px;top:${ry}px;pointer-events:none;`;
+    // Pour les types 56-64 (rotation via atan2 x2/y2), calculer l'extension verticale réelle
+    let ryFinal = ry, hFinal = h, svgTranslateY = 0;
+    if (o.class === 3 && o.type >= 56 && o.type <= 64) {
+      const _x2 = isFinite(o.x2) ? o.x2 : 94;
+      const _y2 = isFinite(o.y2) ? o.y2 : 0;
+      const _d  = Math.hypot(_x2, _y2) || 94;
+      const _a  = Math.atan2(_y2, _x2);
+      const symYMin = (Math.min(0, _d * Math.sin(_a)) - 7) * sy;
+      const symYMax = (Math.max(0, _d * Math.sin(_a)) + 7) * sy;
+      if (symYMin < 0) {
+        ryFinal = ry + symYMin;
+        svgTranslateY = -symYMin;
+        hFinal = Math.max(h, symYMax) - symYMin;
+      } else if (symYMax > h) {
+        hFinal = symYMax;
+      }
+    }
+    div.style.cssText = `position:absolute;left:${rx}px;top:${ryFinal}px;pointer-events:none;`;
     // class=3 : scale(sx sy) dans un <g>, overflow:visible pour les débordements (translate/rotate étendus)
     div.innerHTML = o.class === 3
-      ? `<svg width="${w}" height="${h}" overflow="visible" xmlns="http://www.w3.org/2000/svg"><g transform="scale(${sx} ${sy})">${bkg}${shape}</g></svg>`
+      ? `<svg width="${w}" height="${hFinal}" overflow="visible" xmlns="http://www.w3.org/2000/svg"><g transform="translate(0 ${svgTranslateY}) scale(${sx} ${sy})">${bkg}${shape}</g></svg>`
       : `<svg width="${w}" height="${h}" viewBox="0 0 ${o.bkgWidth} ${o.bkgHeight}" xmlns="http://www.w3.org/2000/svg">${bkg}${shape}</svg>`;
     grpDiv.appendChild(div);
     drawn++;
