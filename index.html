@@ -916,6 +916,11 @@
       <button onclick="owThemeChargerPerso()" style="font-size:0.8em;">Charger</button>
       <button onclick="owThemeSupprimerPerso()" style="font-size:0.8em;" title="Supprimer">✕</button>
     </div>
+    <div style="display:flex;gap:4px;margin-top:6px;">
+      <button onclick="owThemeExporter()" style="font-size:0.8em;flex:1;" title="Exporter tous les thèmes personnalisés en fichier JSON">⬇ Exporter</button>
+      <button onclick="owThemeImporter()" style="font-size:0.8em;flex:1;" title="Importer des thèmes depuis un fichier JSON">⬆ Importer</button>
+    </div>
+    <input type="file" id="owThemeImportFile" accept=".json" style="display:none" onchange="owThemeImporterFichier(this)"/>
   </div>
 
   <div class="ow-popup-foot">
@@ -4545,6 +4550,48 @@ function owThemeSupprimerPerso() {
   const liste = owThemesPersoListe().filter(t => t._nom !== nom);
   localStorage.setItem('ow-themes-perso', JSON.stringify(liste));
   owThemeRemplirSelectPerso();
+}
+
+function owThemeExporter() {
+  const liste = owThemesPersoListe();
+  if (!liste.length) { alert('Aucun thème personnalisé à exporter.'); return; }
+  const json = JSON.stringify(liste, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'kandisky-themes.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function owThemeImporter() {
+  document.getElementById('owThemeImportFile').value = '';
+  document.getElementById('owThemeImportFile').click();
+}
+
+function owThemeImporterFichier(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    let importes;
+    try { importes = JSON.parse(e.target.result); }
+    catch { alert('Fichier JSON invalide.'); return; }
+    if (!Array.isArray(importes)) { alert('Format invalide : tableau JSON attendu.'); return; }
+    const liste = owThemesPersoListe();
+    let ajouts = 0, remplacements = 0;
+    for (const t of importes) {
+      if (!t._nom) continue;
+      const idx = liste.findIndex(x => x._nom === t._nom);
+      if (idx >= 0) { liste[idx] = t; remplacements++; }
+      else { liste.push(t); ajouts++; }
+    }
+    localStorage.setItem('ow-themes-perso', JSON.stringify(liste));
+    owThemeRemplirSelectPerso();
+    alert(ajouts + ' thème(s) ajouté(s), ' + remplacements + ' remplacé(s).');
+  };
+  reader.readAsText(file);
 }
 
 function owHexify(col) {
