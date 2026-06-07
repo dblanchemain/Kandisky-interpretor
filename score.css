@@ -23,6 +23,7 @@
 
 body {
 	background-color: var(--ow-bg-body, #f7f7f7);
+	color: var(--ow-color-text, #222);
 	padding:0px;
 	margin:0px;
 	font-family: Verdana, "Bitstream Vera Sans", "Lucida Grande", sans-serif;

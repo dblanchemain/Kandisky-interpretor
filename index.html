@@ -213,6 +213,7 @@
       cursor: pointer;
       border: 1px solid color-mix(in srgb, var(--ow-color-accent, #4a90d9) 35%, transparent);
       background: color-mix(in srgb, var(--ow-color-accent, #4a90d9) 8%, var(--ow-bg-panel, #e2e2e2));
+      color: var(--ow-color-text, #222);
     }
     .ow-nu-cell:hover { background: color-mix(in srgb, var(--ow-color-accent, #4a90d9) 22%, transparent); border-color: var(--ow-color-accent, #4a90d9); }
     .ow-nu-cell.actif { background: var(--ow-color-accent, #4a90d9); color: #fff; border-color: var(--ow-color-accent, #2a70b9); }
@@ -227,9 +228,10 @@
       cursor: move;
       z-index: 6;
       pointer-events: all;
+      color: var(--ow-color-text, #111);
     }
     .ow-nuinst svg { display: block; overflow: visible; }
-    .ow-nuinst.actif { outline: 1px solid #2373b2; border-radius: 2px; }
+    .ow-nuinst.actif { outline: 1px solid var(--ow-color-accent, #2373b2); border-radius: 2px; }
 
     /* ── Bandeau Tempo / Gain ── */
     #owTempoBar {
@@ -1875,11 +1877,11 @@ function owApplyNuance(nom) {
 function owNuGlyphSvg(nom) {
   const glyph = OW_NUANCE_GLYPHS[nom.toLowerCase()] || '';
   if (!glyph) {
-    return '<span style="font-style:italic;font-size:11px;color:#222">' + nom + '</span>';
+    return '<span style="font-style:italic;font-size:11px;">' + nom + '</span>';
   }
   return '<svg xmlns="http://www.w3.org/2000/svg" width="52" height="16" viewBox="0 0 40 14" overflow="visible">' +
     '<rect width="40" height="14" fill="transparent" pointer-events="all"/>' +
-    '<g fill="#111" stroke="#111">' + glyph + '</g></svg>';
+    '<g fill="currentColor" stroke="currentColor">' + glyph + '</g></svg>';
 }
 
 /* ── Supprime une instance de nuance et son point de gain ── */
