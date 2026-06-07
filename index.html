@@ -311,16 +311,17 @@
       transform: translateX(-50%);
       cursor: pointer;
       font-size: 0.72em;
-      background: rgba(255,255,255,0.8);
-      border: 1px solid rgba(0,0,0,0.25);
+      background: color-mix(in srgb, var(--ow-bg-panel, #e2e2e2) 88%, transparent);
+      border: 1px solid color-mix(in srgb, var(--ow-color-text, #222) 25%, transparent);
       border-radius: 3px;
       padding: 1px 6px;
       white-space: nowrap;
+      color: var(--ow-color-text, #222);
       z-index: 6;
       user-select: none;
       pointer-events: auto;
     }
-    .ow-grp-trigger:hover { background: rgba(255,255,255,0.97); }
+    .ow-grp-trigger:hover { background: color-mix(in srgb, var(--ow-bg-panel, #e2e2e2) 100%, transparent); }
     .ow-grp-mute {
       position: absolute;
       top: 3px;
@@ -328,13 +329,13 @@
       cursor: pointer;
       font-size: 0.70em;
       font-weight: bold;
-      background: rgba(255,255,255,0.7);
-      border: 1px solid rgba(0,0,0,0.2);
+      background: color-mix(in srgb, var(--ow-bg-panel, #e2e2e2) 80%, transparent);
+      border: 1px solid color-mix(in srgb, var(--ow-color-text, #222) 20%, transparent);
       border-radius: 3px;
       padding: 1px 4px;
       user-select: none;
       pointer-events: auto;
-      color: #999;
+      color: color-mix(in srgb, var(--ow-color-text, #222) 60%, transparent);
       z-index: 6;
     }
     .ow-grp-mute.on {
