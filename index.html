@@ -317,6 +317,28 @@
       pointer-events: auto;
     }
     .ow-grp-trigger:hover { background: rgba(255,255,255,0.97); }
+    .ow-grp-mute {
+      position: absolute;
+      top: 3px;
+      right: 4px;
+      cursor: pointer;
+      font-size: 0.70em;
+      font-weight: bold;
+      background: rgba(255,255,255,0.7);
+      border: 1px solid rgba(0,0,0,0.2);
+      border-radius: 3px;
+      padding: 1px 4px;
+      user-select: none;
+      pointer-events: auto;
+      color: #999;
+      z-index: 6;
+    }
+    .ow-grp-mute.on {
+      background: rgba(200,50,50,0.85);
+      color: #fff;
+      border-color: rgba(160,20,20,0.5);
+    }
+    .ow-grp.muted { opacity: 0.5; }
     .ow-grp-aug-val {
       position: absolute;
       right: calc(100% + 4px);
@@ -1070,7 +1092,8 @@ function owParseData(txt, label) {
           posRelFinAvant:     g.getAttribute('posRelFinAvant')    || '',
           posRelFinGroupe:    g.getAttribute('posRelFinGroupe')   || '',
           dir: g.getAttribute('dir') || '',
-          positionTemporelle: g.getAttribute('positionTemporelle') !== 'false'
+          positionTemporelle: g.getAttribute('positionTemporelle') !== 'false',
+          mute: b(g.getAttribute('mute'))
         });
       });
     });
@@ -1241,6 +1264,7 @@ function owSerialise() {
       xml += ` posRelFin="${b(grp.posRelFin)}" posRelFinAvant="${x(grp.posRelFinAvant)}" posRelFinGroupe="${x(grp.posRelFinGroupe)}"`;
       xml += ` dir="${x(grp.dir || '')}"`;
       xml += ` positionTemporelle="${b(grp.positionTemporelle !== false)}"`;
+      xml += ` mute="${b(grp.mute)}"`;
       xml += ` posX="${grp.posX}" posY="${grp.posY}" w="${grp.w}" h="${grp.h}" color="${x(grp.color)}" opacity="${grp.opacity}"/>\n`;
     });
     xml += `    </section>\n`;
@@ -1950,7 +1974,7 @@ function owRenderGroups() {
   const space = document.getElementById('space');
   owGroups.filter(g => g.sectionId === owActiveSec).forEach(grp => {
     const div = document.createElement('div');
-    div.className = 'ow-grp' + (grp.id === owActiveGrp ? ' actif' : '');
+    div.className = 'ow-grp' + (grp.id === owActiveGrp ? ' actif' : '') + (grp.mute ? ' muted' : '');
     div.id = 'grp' + grp.id;
     owApplyGrpStyle(div, grp);
     div.style.left = (grp.posX || 0) + 'px';
@@ -1963,6 +1987,21 @@ function owRenderGroups() {
     triggerBtn.addEventListener('mousedown', e => e.stopPropagation());
     triggerBtn.addEventListener('click', e => { e.stopPropagation(); owOpenGrpPlayPopup(grp, div); });
     div.appendChild(triggerBtn);
+
+    /* ── Haut droite : bouton Mute ── */
+    const muteBtn = document.createElement('div');
+    muteBtn.className = 'ow-grp-mute' + (grp.mute ? ' on' : '');
+    muteBtn.textContent = 'M';
+    muteBtn.title = 'Mute — ignore les fichiers audio lors de la lecture';
+    muteBtn.addEventListener('mousedown', e => e.stopPropagation());
+    muteBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      grp.mute = !grp.mute;
+      muteBtn.classList.toggle('on', grp.mute);
+      div.classList.toggle('muted', grp.mute);
+      owSetModified(true);
+    });
+    div.appendChild(muteBtn);
 
     /* ── Gauche : valeur augmentation (absolue, mi-hauteur) ── */
     if (grp.augDim) {
@@ -4072,6 +4111,7 @@ async function owStartAudio() {
   const grps = owGroups.filter(g => g.sectionId === owActiveSec && g.owTableObjets?.length);
 
   for (const grp of grps) {
+    if (grp.mute) continue;
     const parsed = owParseGrpXml(grp.id);
     if (!parsed) continue;
     const { ctn, zs } = parsed;
