@@ -4,13 +4,29 @@
    Ce fichier est sous licence GNU General Public License
    ============================================== */
 
+:root {
+  --ow-bg-body: #f7f7f7;
+  --ow-bg-panel: #e2e2e2;
+  --ow-bg-workspace: #f5f5f5;
+  --ow-bg-menu: #313237;
+  --ow-bg-menu-drop: #2a2d35;
+  --ow-bg-menu-hover: #4a4f5c;
+  --ow-color-menu-fg: #e8e8e8;
+  --ow-bg-popup: #f9f9fd;
+  --ow-bg-section-hd: #d8e4f0;
+  --ow-color-accent: #4a90d9;
+  --ow-color-active-grp: #e04400;
+  --ow-color-text: #222;
+  --ow-bg-grp: rgba(200,220,255,0.45);
+  --ow-font-size-base: 0.95em;
+}
 
 body {
-	background-color: #f7f7f7;
+	background-color: var(--ow-bg-body, #f7f7f7);
 	padding:0px;
 	margin:0px;
 	font-family: Verdana, "Bitstream Vera Sans", "Lucida Grande", sans-serif;
-	font-size:.95em;
+	font-size: var(--ow-font-size-base, 0.95em);
 }
 #global {
 	width: 100%;
@@ -65,7 +81,7 @@ color:#ffffff;
 	margin:0px;
 	z-index:0;
 	text-align:center;
-	background-color:#e2e2e2;
+	background-color: var(--ow-bg-panel, #e2e2e2);
 	overflow:hidden;
 }
 #secondaire {
@@ -76,7 +92,7 @@ color:#ffffff;
 	height:820px;
 	margin: 0px;
 	padding: 0px;
-	background-color: #f5f5f5;
+	background-color: var(--ow-bg-workspace, #f5f5f5);
 	border: 1px solid #000000;
 	overflow:hidden;
 }

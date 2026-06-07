@@ -15,7 +15,7 @@
       top: 0; left: 0;
       width: 100%;
       height: 26px;
-      background-color: #313237;
+      background-color: var(--ow-bg-menu, #313237);
       z-index: 200;
       display: flex;
       align-items: stretch;
@@ -24,20 +24,20 @@
     .mnu-item {
       position: relative;
       padding: 0 14px;
-      color: #e8e8e8;
+      color: var(--ow-color-menu-fg, #e8e8e8);
       cursor: pointer;
       font-size: 0.82em;
       display: flex;
       align-items: center;
     }
     .mnu-item:hover, .mnu-item.open {
-      background-color: #4a4f5c;
+      background-color: var(--ow-bg-menu-hover, #4a4f5c);
     }
     .mnu-drop {
       display: none;
       position: absolute;
       top: 26px; left: 0;
-      background-color: #2a2d35;
+      background-color: var(--ow-bg-menu-drop, #2a2d35);
       border: 1px solid #555;
       min-width: 210px;
       z-index: 300;
@@ -48,12 +48,12 @@
     .mnu-item.open > .mnu-drop { display: block; }
     .mnu-drop li {
       padding: 5px 18px;
-      color: #e8e8e8;
+      color: var(--ow-color-menu-fg, #e8e8e8);
       cursor: pointer;
       font-size: 0.82em;
       white-space: nowrap;
     }
-    .mnu-drop li:hover { background-color: #373f8a; }
+    .mnu-drop li:hover { background-color: var(--ow-bg-menu-hover, #373f8a); }
     .mnu-drop li.sep {
       height: 1px;
       background-color: #555;
@@ -76,7 +76,7 @@
       position: absolute;
       left: 100%;
       top: 0;
-      background-color: #2a2d35;
+      background-color: var(--ow-bg-menu-drop, #2a2d35);
       border: 1px solid #555;
       min-width: 100px;
       list-style: none;
@@ -87,12 +87,12 @@
     .mnu-sub:hover > .mnu-subsub { display: block; }
     .mnu-subsub li {
       padding: 5px 18px;
-      color: #e8e8e8;
+      color: var(--ow-color-menu-fg, #e8e8e8);
       cursor: pointer;
       font-size: 0.82em;
       white-space: nowrap;
     }
-    .mnu-subsub li:hover { background-color: #373f8a; }
+    .mnu-subsub li:hover { background-color: var(--ow-bg-menu-hover, #373f8a); }
     .mnu-subsub li.actif-zoom { color: #7fc; font-weight: bold; }
 
     #owFileLabel {
@@ -145,7 +145,8 @@
       text-align: center;
       font-weight: bold;
       font-size: 0.9em;
-      background-color: #d8e4f0;
+      background-color: var(--ow-bg-section-hd, #d8e4f0);
+      color: var(--ow-color-text, #222);
       letter-spacing: 1px;
     }
     #owSectionList {
@@ -155,10 +156,10 @@
     }
     .ow-sec-item {
       padding: 3px 4px 3px 6px;
-      border-left: 3px solid #4a90d9;
+      border-left: 3px solid var(--ow-color-accent, #4a90d9);
       margin: 2px 0;
       cursor: pointer;
-      color: #222;
+      color: var(--ow-color-text, #222);
       display: flex;
       align-items: baseline;
       gap: 6px;
@@ -166,23 +167,23 @@
     .ow-sec-roman {
       font-weight: bold;
       font-size: 1em;
-      color: #2a5fa8;
+      color: var(--ow-color-accent, #2a5fa8);
       min-width: 28px;
       text-align: right;
       flex-shrink: 0;
     }
     .ow-sec-name {
       font-size: 0.85em;
-      color: #444;
+      color: var(--ow-color-text, #444);
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
     .ow-sec-item.actif {
-      background: #d0e4ff;
+      background: color-mix(in srgb, var(--ow-color-accent, #4a90d9) 20%, transparent);
       border-left-width: 4px;
     }
-    .ow-sec-item:hover:not(.actif) { background: #edf3ff; }
+    .ow-sec-item:hover:not(.actif) { background: color-mix(in srgb, var(--ow-color-accent, #4a90d9) 8%, transparent); }
 
     /* ── Palette de nuances ── */
     #owNuanceHeader {
@@ -192,7 +193,8 @@
       text-align: center;
       font-weight: bold;
       font-size: 0.9em;
-      background-color: #d8e4f0;
+      background-color: var(--ow-bg-section-hd, #d8e4f0);
+      color: var(--ow-color-text, #222);
       letter-spacing: 1px;
     }
     #owNuancePalette {
@@ -209,11 +211,11 @@
       text-align: center;
       padding: 3px 2px;
       cursor: pointer;
-      border: 1px solid #c0c8d8;
-      background: #eef2f8;
+      border: 1px solid color-mix(in srgb, var(--ow-color-accent, #4a90d9) 35%, transparent);
+      background: color-mix(in srgb, var(--ow-color-accent, #4a90d9) 8%, var(--ow-bg-panel, #e2e2e2));
     }
-    .ow-nu-cell:hover { background: #d0ddf0; border-color: #4a90d9; }
-    .ow-nu-cell.actif { background: #4a90d9; color: #fff; border-color: #2a70b9; }
+    .ow-nu-cell:hover { background: color-mix(in srgb, var(--ow-color-accent, #4a90d9) 22%, transparent); border-color: var(--ow-color-accent, #4a90d9); }
+    .ow-nu-cell.actif { background: var(--ow-color-accent, #4a90d9); color: #fff; border-color: var(--ow-color-accent, #2a70b9); }
     .ow-nu-cell svg { overflow: visible; }
     .ow-nu-cell.actif svg g { fill: #fff; stroke: #fff; }
     /* Éléments de nuances dans l'espace de travail */
@@ -267,7 +269,7 @@
       left: 0;
       width: 12960px;
       height: 0;
-      border-top: 2px solid #4a90d9;
+      border-top: 2px solid var(--ow-color-accent, #4a90d9);
       z-index: 2;
       pointer-events: none;
     }
@@ -276,7 +278,7 @@
       top: 3px;
       left: 4px;
       font-size: 0.72em;
-      color: #4a90d9;
+      color: var(--ow-color-accent, #4a90d9);
       background: rgba(255,255,255,0.85);
       padding: 1px 5px;
       pointer-events: none;
@@ -288,7 +290,7 @@
     .ow-grp {
       position: absolute;
       border: none;
-      background-color: rgba(200, 220, 255, 0.45);
+      background-color: var(--ow-bg-grp, rgba(200,220,255,0.45));
       cursor: move;
       z-index: 5;
       min-width: 60px;
@@ -297,8 +299,8 @@
       box-sizing: border-box;
     }
     .ow-grp.actif {
-      outline: 2px solid #e04400;
-      box-shadow: 0 0 4px rgba(224,68,0,0.5);
+      outline: 2px solid var(--ow-color-active-grp, #e04400);
+      box-shadow: 0 0 4px color-mix(in srgb, var(--ow-color-active-grp, #e04400) 50%, transparent);
     }
     .ow-grp-trigger {
       position: absolute;
@@ -382,10 +384,10 @@
       height: 14px;
       cursor: se-resize;
       z-index: 10;
-      background: linear-gradient(135deg, transparent 40%, rgba(74,144,217,0.7) 40%);
+      background: linear-gradient(135deg, transparent 40%, color-mix(in srgb, var(--ow-color-accent, #4a90d9) 70%, transparent) 40%);
     }
     .ow-grp.actif .ow-grp-resize {
-      background: linear-gradient(135deg, transparent 40%, rgba(224,68,0,0.7) 40%);
+      background: linear-gradient(135deg, transparent 40%, color-mix(in srgb, var(--ow-color-active-grp, #e04400) 70%, transparent) 40%);
     }
     /* ── Popup lecture groupe ── */
     #grpPlayPopup label { font-size: 0.85em; width: 80px; display: inline-block; }
@@ -398,20 +400,21 @@
     /* ── Popups communs ── */
     .ow-popup {
       position: absolute;
-      background: #f9f9fd;
+      background: var(--ow-bg-popup, #f9f9fd);
       border: 1px solid #888;
       display: none;
       z-index: 400;
       box-shadow: 3px 5px 14px rgba(0,0,0,0.3);
+      color: var(--ow-color-text, #222);
     }
     .ow-popup-hd {
       margin: 0;
       padding: 5px 8px;
       width: 100%;
       height: 26px;
-      background-color: #313237;
+      background-color: var(--ow-bg-menu, #313237);
       border-bottom: 1px solid #000;
-      color: #e8e8e8;
+      color: var(--ow-color-menu-fg, #e8e8e8);
       font-size: 1em;
       font-weight: bold;
       box-sizing: border-box;
@@ -427,17 +430,18 @@
     /* ── Préférences ── */
     #prefTabBar {
       display: flex;
-      background: #e2e2e2;
+      background: var(--ow-bg-panel, #e2e2e2);
       border-bottom: 1px solid #ccc;
     }
     .pref-tab {
-      padding: 5px 16px;
+      padding: 5px 12px;
       cursor: pointer;
       font-size: 0.82em;
       border-right: 1px solid #ccc;
+      color: var(--ow-color-text, #222);
     }
     .pref-tab.actif {
-      background: #f9f9fd;
+      background: var(--ow-bg-popup, #f9f9fd);
       font-weight: bold;
     }
     .pref-pane { display: none; padding: 10px; max-height: 280px; overflow-y: auto; }
@@ -676,13 +680,14 @@
 </div>
 
 <!-- ════════════════════════ POPUP : Préférences ════════════════════════ -->
-<div id="prefsPopup" class="ow-popup" style="top:90px;left:330px;width:360px;">
+<div id="prefsPopup" class="ow-popup" style="top:90px;left:330px;width:380px;">
   <div id="prefsPopupHeader" class="ow-popup-hd">Préférences</div>
   <div id="prefTabBar">
     <div class="pref-tab actif" onclick="owShowPrefTab('nuances')">Nuances</div>
     <div class="pref-tab" onclick="owShowPrefTab('grille')">Grille</div>
     <div class="pref-tab" onclick="owShowPrefTab('spatial');owSpatialRemplirUI()">Spatialisation</div>
     <div class="pref-tab" onclick="owShowPrefTab('son');owSonRemplirUI()">Son</div>
+    <div class="pref-tab" onclick="owShowPrefTab('theme');owThemeRemplirUI()">Thème</div>
   </div>
   <div id="prefPaneGrille" class="pref-pane">
     <table border="0" cellpadding="5">
@@ -821,6 +826,64 @@
         </td>
       </tr>
     </table>
+  </div>
+
+  <!-- ── Thème ── -->
+  <div id="prefPaneTheme" class="pref-pane">
+    <table border="0" cellpadding="5" style="width:100%;">
+      <tr>
+        <td style="white-space:nowrap;">Thème :</td>
+        <td>
+          <select id="owThemePreset" style="width:100%;" onchange="owThemePresetChange(this.value)">
+            <option value="clair">Clair</option>
+            <option value="sombre">Sombre</option>
+            <option value="nuit">Nuit</option>
+            <option value="perso">Personnalisé</option>
+          </select>
+        </td>
+      </tr>
+      <tr>
+        <td style="white-space:nowrap;">Accentuation :</td>
+        <td><input type="color" id="owTcAccent" oninput="owThemeCustomChange()" style="width:60px;height:26px;cursor:pointer;"/></td>
+      </tr>
+      <tr>
+        <td style="white-space:nowrap;">Sélection :</td>
+        <td><input type="color" id="owTcActive" oninput="owThemeCustomChange()" style="width:60px;height:26px;cursor:pointer;"/></td>
+      </tr>
+      <tr>
+        <td style="white-space:nowrap;">Fond espace :</td>
+        <td><input type="color" id="owTcWorkspace" oninput="owThemeCustomChange()" style="width:60px;height:26px;cursor:pointer;"/></td>
+      </tr>
+      <tr>
+        <td style="white-space:nowrap;">Fond panneau :</td>
+        <td><input type="color" id="owTcPanel" oninput="owThemeCustomChange()" style="width:60px;height:26px;cursor:pointer;"/></td>
+      </tr>
+      <tr>
+        <td style="white-space:nowrap;">Barre menu :</td>
+        <td><input type="color" id="owTcMenu" oninput="owThemeCustomChange()" style="width:60px;height:26px;cursor:pointer;"/></td>
+      </tr>
+      <tr>
+        <td style="white-space:nowrap;">Popup :</td>
+        <td><input type="color" id="owTcPopup" oninput="owThemeCustomChange()" style="width:60px;height:26px;cursor:pointer;"/></td>
+      </tr>
+      <tr>
+        <td style="white-space:nowrap;">En-têtes :</td>
+        <td><input type="color" id="owTcSectionHd" oninput="owThemeCustomChange()" style="width:60px;height:26px;cursor:pointer;"/></td>
+      </tr>
+      <tr>
+        <td style="white-space:nowrap;">Police :</td>
+        <td>
+          <select id="owTcFontSize" onchange="owThemeCustomChange()">
+            <option value="0.80em">Petite</option>
+            <option value="0.95em" selected>Normale</option>
+            <option value="1.1em">Grande</option>
+          </select>
+        </td>
+      </tr>
+    </table>
+    <div style="margin-top:8px;text-align:right;">
+      <button onclick="owThemeReset()" style="font-size:0.8em;">Réinitialiser</button>
+    </div>
   </div>
 
   <div class="ow-popup-foot">
@@ -4194,6 +4257,168 @@ async function owRefreshAll() {
 }
 
 // La connexion WebSocket démarre quand main.js envoie audioServerReady;PORT
+
+// ═══════════════════════════════════════════════
+//  THÈMES
+// ═══════════════════════════════════════════════
+
+const OW_THEMES = {
+  clair: {
+    nom: 'Clair',
+    '--ow-bg-body':        '#f7f7f7',
+    '--ow-bg-panel':       '#e2e2e2',
+    '--ow-bg-workspace':   '#f5f5f5',
+    '--ow-bg-menu':        '#313237',
+    '--ow-bg-menu-drop':   '#2a2d35',
+    '--ow-bg-menu-hover':  '#4a4f5c',
+    '--ow-color-menu-fg':  '#e8e8e8',
+    '--ow-bg-popup':       '#f9f9fd',
+    '--ow-bg-section-hd':  '#d8e4f0',
+    '--ow-color-accent':   '#4a90d9',
+    '--ow-color-active-grp': '#e04400',
+    '--ow-color-text':     '#222222',
+    '--ow-bg-grp':         'rgba(200,220,255,0.45)',
+    '--ow-font-size-base': '0.95em',
+  },
+  sombre: {
+    nom: 'Sombre',
+    '--ow-bg-body':        '#1e1e2e',
+    '--ow-bg-panel':       '#181825',
+    '--ow-bg-workspace':   '#1e1e2e',
+    '--ow-bg-menu':        '#11111b',
+    '--ow-bg-menu-drop':   '#181825',
+    '--ow-bg-menu-hover':  '#313244',
+    '--ow-color-menu-fg':  '#cdd6f4',
+    '--ow-bg-popup':       '#181825',
+    '--ow-bg-section-hd':  '#1e2a4a',
+    '--ow-color-accent':   '#89b4fa',
+    '--ow-color-active-grp': '#fab387',
+    '--ow-color-text':     '#cdd6f4',
+    '--ow-bg-grp':         'rgba(137,180,250,0.15)',
+    '--ow-font-size-base': '0.95em',
+  },
+  nuit: {
+    nom: 'Nuit',
+    '--ow-bg-body':        '#0d0d0d',
+    '--ow-bg-panel':       '#141414',
+    '--ow-bg-workspace':   '#0d0d0d',
+    '--ow-bg-menu':        '#080808',
+    '--ow-bg-menu-drop':   '#141414',
+    '--ow-bg-menu-hover':  '#222222',
+    '--ow-color-menu-fg':  '#888888',
+    '--ow-bg-popup':       '#1a1a1a',
+    '--ow-bg-section-hd':  '#1a2030',
+    '--ow-color-accent':   '#5080b0',
+    '--ow-color-active-grp': '#a03800',
+    '--ow-color-text':     '#aaaaaa',
+    '--ow-bg-grp':         'rgba(80,120,180,0.12)',
+    '--ow-font-size-base': '0.95em',
+  },
+};
+
+let owThemeCourant = null;
+
+function owAppliquerTheme(vars) {
+  const root = document.documentElement;
+  for (const [k, v] of Object.entries(vars)) {
+    if (k.startsWith('--')) root.style.setProperty(k, v);
+  }
+}
+
+function owSauvegarderTheme() {
+  if (owThemeCourant) localStorage.setItem('ow-theme', JSON.stringify(owThemeCourant));
+}
+
+function owChargerTheme() {
+  try {
+    const raw = localStorage.getItem('ow-theme');
+    if (!raw) return;
+    owThemeCourant = JSON.parse(raw);
+    owAppliquerTheme(owThemeCourant);
+  } catch(e) { /* ignore */ }
+}
+
+function owThemeRemplirUI() {
+  const t = owThemeCourant || OW_THEMES.clair;
+  document.getElementById('owTcAccent').value    = owHexify(t['--ow-color-accent']   || '#4a90d9');
+  document.getElementById('owTcActive').value    = owHexify(t['--ow-color-active-grp'] || '#e04400');
+  document.getElementById('owTcWorkspace').value = owHexify(t['--ow-bg-workspace']   || '#f5f5f5');
+  document.getElementById('owTcPanel').value     = owHexify(t['--ow-bg-panel']       || '#e2e2e2');
+  document.getElementById('owTcMenu').value      = owHexify(t['--ow-bg-menu']        || '#313237');
+  document.getElementById('owTcPopup').value     = owHexify(t['--ow-bg-popup']       || '#f9f9fd');
+  document.getElementById('owTcSectionHd').value = owHexify(t['--ow-bg-section-hd']  || '#d8e4f0');
+  const fz = t['--ow-font-size-base'] || '0.95em';
+  const sel = document.getElementById('owTcFontSize');
+  let matched = false;
+  for (const opt of sel.options) { if (opt.value === fz) { opt.selected = true; matched = true; break; } }
+  if (!matched) sel.options[1].selected = true;
+  const preset = document.getElementById('owThemePreset');
+  const name = t._preset || 'perso';
+  for (const opt of preset.options) { opt.selected = (opt.value === name); }
+}
+
+function owThemePresetChange(val) {
+  if (val === 'perso') return;
+  const th = OW_THEMES[val];
+  if (!th) return;
+  owThemeCourant = Object.assign({}, th, { _preset: val });
+  owAppliquerTheme(owThemeCourant);
+  owSauvegarderTheme();
+  owThemeRemplirUI();
+}
+
+function owThemeCustomChange() {
+  const vars = {
+    _preset: 'perso',
+    '--ow-color-accent':    document.getElementById('owTcAccent').value,
+    '--ow-color-active-grp': document.getElementById('owTcActive').value,
+    '--ow-bg-workspace':    document.getElementById('owTcWorkspace').value,
+    '--ow-bg-panel':        document.getElementById('owTcPanel').value,
+    '--ow-bg-menu':         document.getElementById('owTcMenu').value,
+    '--ow-bg-popup':        document.getElementById('owTcPopup').value,
+    '--ow-bg-section-hd':   document.getElementById('owTcSectionHd').value,
+    '--ow-font-size-base':  document.getElementById('owTcFontSize').value,
+  };
+  const base = owThemeCourant && OW_THEMES[owThemeCourant._preset] ? OW_THEMES[owThemeCourant._preset] : OW_THEMES.clair;
+  owThemeCourant = Object.assign({}, base, vars);
+  const wsBg = vars['--ow-bg-workspace'];
+  owThemeCourant['--ow-bg-body'] = wsBg;
+  const menuBg = vars['--ow-bg-menu'];
+  owThemeCourant['--ow-bg-menu-drop'] = owDarken(menuBg, 0.85);
+  owThemeCourant['--ow-bg-menu-hover'] = owBrighten(menuBg, 1.4);
+  document.getElementById('owThemePreset').value = 'perso';
+  owAppliquerTheme(owThemeCourant);
+  owSauvegarderTheme();
+}
+
+function owThemeReset() {
+  owThemeCourant = Object.assign({}, OW_THEMES.clair, { _preset: 'clair' });
+  owAppliquerTheme(owThemeCourant);
+  owSauvegarderTheme();
+  owThemeRemplirUI();
+}
+
+function owHexify(col) {
+  if (/^#[0-9a-fA-F]{6}$/.test(col)) return col;
+  const m = col.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+  if (!m) return '#808080';
+  return '#' + [m[1],m[2],m[3]].map(n => parseInt(n).toString(16).padStart(2,'0')).join('');
+}
+
+function owDarken(hex, factor) {
+  const m = hex.match(/^#([0-9a-fA-F]{6})$/);
+  if (!m) return hex;
+  const r = Math.round(parseInt(m[1].slice(0,2),16)*factor);
+  const g = Math.round(parseInt(m[1].slice(2,4),16)*factor);
+  const b = Math.round(parseInt(m[1].slice(4,6),16)*factor);
+  return '#'+[r,g,b].map(v=>Math.min(255,Math.max(0,v)).toString(16).padStart(2,'0')).join('');
+}
+
+function owBrighten(hex, factor) {
+  return owDarken(hex, factor);
+}
+
+owChargerTheme();
 
 // ═══════════════════════════════════════════════
 //  WORKSPACE : adapte #work à la fenêtre visible
