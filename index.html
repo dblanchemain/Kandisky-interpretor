@@ -902,6 +902,20 @@
     <div style="margin-top:8px;text-align:right;">
       <button onclick="owThemeReset()" style="font-size:0.8em;">Réinitialiser</button>
     </div>
+    <hr style="margin:10px 0 6px;border:none;border-top:1px solid #ccc;"/>
+    <div style="font-size:0.82em;font-weight:bold;margin-bottom:5px;color:var(--ow-color-text,#222);">Thèmes personnalisés</div>
+    <div style="display:flex;gap:4px;align-items:center;margin-bottom:5px;">
+      <input type="text" id="owThemeSaveName" placeholder="Nom du thème…"
+             style="flex:1;font-size:0.82em;padding:2px 5px;background:var(--ow-bg-popup,#f9f9fd);color:var(--ow-color-text,#222);border:1px solid #aaa;"/>
+      <button onclick="owThemeSauvegarderPerso()" style="font-size:0.8em;">Sauvegarder</button>
+    </div>
+    <div style="display:flex;gap:4px;align-items:center;">
+      <select id="owThemesSauvegardes" style="flex:1;font-size:0.82em;background:var(--ow-bg-popup,#f9f9fd);color:var(--ow-color-text,#222);">
+        <option value="">— choisir —</option>
+      </select>
+      <button onclick="owThemeChargerPerso()" style="font-size:0.8em;">Charger</button>
+      <button onclick="owThemeSupprimerPerso()" style="font-size:0.8em;" title="Supprimer">✕</button>
+    </div>
   </div>
 
   <div class="ow-popup-foot">
@@ -4441,6 +4455,7 @@ function owThemeRemplirUI() {
   const preset = document.getElementById('owThemePreset');
   const name = t._preset || 'perso';
   for (const opt of preset.options) { opt.selected = (opt.value === name); }
+  owThemeRemplirSelectPerso();
 }
 
 function owThemePresetChange(val) {
@@ -4482,6 +4497,54 @@ function owThemeReset() {
   owAppliquerTheme(owThemeCourant);
   owSauvegarderTheme();
   owThemeRemplirUI();
+}
+
+// ── Thèmes personnalisés sauvegardés ─────────────────────────────────
+function owThemesPersoListe() {
+  try { return JSON.parse(localStorage.getItem('ow-themes-perso') || '[]'); }
+  catch { return []; }
+}
+
+function owThemeRemplirSelectPerso() {
+  const sel = document.getElementById('owThemesSauvegardes');
+  if (!sel) return;
+  const liste = owThemesPersoListe();
+  sel.innerHTML = '<option value="">— choisir —</option>' +
+    liste.map(t => `<option value="${t._nom}">${t._nom}</option>`).join('');
+}
+
+function owThemeSauvegarderPerso() {
+  const nomEl = document.getElementById('owThemeSaveName');
+  const nom = nomEl ? nomEl.value.trim() : '';
+  if (!nom) { alert('Saisissez un nom pour ce thème.'); return; }
+  const liste = owThemesPersoListe();
+  const entry = Object.assign({}, owThemeCourant || OW_THEMES.clair, { _nom: nom, _preset: 'perso' });
+  const idx = liste.findIndex(t => t._nom === nom);
+  if (idx >= 0) liste[idx] = entry; else liste.push(entry);
+  localStorage.setItem('ow-themes-perso', JSON.stringify(liste));
+  owThemeRemplirSelectPerso();
+  const sel = document.getElementById('owThemesSauvegardes');
+  if (sel) sel.value = nom;
+}
+
+function owThemeChargerPerso() {
+  const sel = document.getElementById('owThemesSauvegardes');
+  if (!sel || !sel.value) return;
+  const t = owThemesPersoListe().find(th => th._nom === sel.value);
+  if (!t) return;
+  owThemeCourant = Object.assign({}, t);
+  owAppliquerTheme(owThemeCourant);
+  owSauvegarderTheme();
+  owThemeRemplirUI();
+}
+
+function owThemeSupprimerPerso() {
+  const sel = document.getElementById('owThemesSauvegardes');
+  if (!sel || !sel.value) return;
+  const nom = sel.value;
+  const liste = owThemesPersoListe().filter(t => t._nom !== nom);
+  localStorage.setItem('ow-themes-perso', JSON.stringify(liste));
+  owThemeRemplirSelectPerso();
 }
 
 function owHexify(col) {
