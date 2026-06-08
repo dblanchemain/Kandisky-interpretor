@@ -4220,8 +4220,8 @@ async function owStartAudio() {
 
     for (const obj of grp.owTableObjets) {
       const objPx  = grp.posX + (obj.posX * zs - ctn.ctnX * zs) * sx0;
+      if (objPx < barScorePx) continue;
       const delay  = owScorePxToRealSec(barScorePx, objPx);
-      if (delay < -0.05) continue;
 
       const fileId   = obj._origId ?? obj.id;
       const filename = fileId + '.wav';
