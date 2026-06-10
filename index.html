@@ -2739,18 +2739,18 @@ async function owDoExportMidi() {
   const partName   = (owFilePath || 'partition').split(/[/\\]/).pop().replace(/\.[^.]+$/, '');
   const midiTracks = [];
 
+  // Résoudre tous les chemins absolus une seule fois (pour la copie future)
   for (let i = 0; i < n; i++) {
     const objs = assignNotes(allObjs.slice(i * filesPerInterp, (i + 1) * filesPerInterp));
 
-    // Résoudre les chemins absolus (interprete/ si existant, sinon Audios/)
-    const resolved = await Promise.all(
-      objs.map(o => window.api.resolveAudioPath(owFilePath, o.file))
-    );
+    await Promise.all(objs.map(async o => {
+      o._absPath = await window.api.resolveAudioPath(owFilePath, o.file);
+    }));
 
-    // JSON compatible mcMidiKeyboard
-    const json = objs.map((o, idx) => ({
+    // JSON compatible mcMidiKeyboard — chemins relatifs au dossier d'export (Audios/)
+    const json = objs.map(o => ({
       key:      o.note,
-      file:     resolved[idx] ?? o.file,
+      file:     'Audios/' + o.file,
       gain:     o.gain,
       fadeType: o.fadeType,
       fadeIn:   o.fadeIn,
