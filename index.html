@@ -537,6 +537,7 @@
       <li onclick="owPermuter()">Permuter deux sections</li>
       <li onclick="owParamsGroupe()">Paramètres</li>
       <li onclick="owExportMulticanal()">Exporter partition multicanal</li>
+      <li onclick="owExportMidi()">Exporter MIDI…</li>
     </ul>
   </div>
 
@@ -692,6 +693,31 @@
     <button onclick="document.getElementById('permutPopup').style.display='none'">Annuler</button>
     &nbsp;
     <button onclick="owDoPermuter()">Permuter</button>
+  </div>
+</div>
+
+<!-- ════════════════════════ POPUP : Export MIDI ════════════════════════ -->
+<div id="midiExportPopup" class="ow-popup" style="top:140px;left:380px;width:320px;">
+  <div id="midiExportPopupHeader" class="ow-popup-hd">Exporter MIDI</div>
+  <div class="ow-popup-body" style="font-size:0.85em;line-height:1.8;">
+    <div>
+      <label>Nombre d'interprètes :
+        <input id="midiExportN" type="number" min="1" max="16" value="1"
+               style="width:60px;margin-left:4px;"/>
+      </label>
+    </div>
+    <div>
+      <label>Touches par clavier :
+        <input id="midiExportK" type="number" min="1" max="88" value="12"
+               style="width:60px;margin-left:4px;"/>
+      </label>
+    </div>
+    <div id="midiExportMsg" style="color:#c55;margin-top:6px;font-size:0.82em;min-height:1.2em;"></div>
+  </div>
+  <div class="ow-popup-foot">
+    <button onclick="document.getElementById('midiExportPopup').style.display='none'">Annuler</button>
+    &nbsp;
+    <button onclick="owDoExportMidi()">Exporter</button>
   </div>
 </div>
 
@@ -2633,6 +2659,175 @@ async function owExportMulticanal() {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
   if (status) status.textContent = `Export OK — ${nCh} ch · ${(totalFrames / SR).toFixed(1)} s`;
+}
+
+// ─── Export MIDI : JSON mcMidiKeyboard × N  +  fichier .mid ───────────────────
+function owExportMidi() {
+  owCloseMenus();
+  if (!owFilePath) { alert('Aucune partition chargée.'); return; }
+  document.getElementById('midiExportMsg').textContent = '';
+  document.getElementById('midiExportPopup').style.display = 'block';
+}
+
+async function owDoExportMidi() {
+  const n   = parseInt(document.getElementById('midiExportN').value, 10);
+  const k   = parseInt(document.getElementById('midiExportK').value, 10);
+  const msg = document.getElementById('midiExportMsg');
+  if (!(n >= 1 && n <= 16)) { msg.textContent = 'N doit être entre 1 et 16.'; return; }
+  if (!(k >= 1 && k <= 88)) { msg.textContent = 'K doit être entre 1 et 88.'; return; }
+  document.getElementById('midiExportPopup').style.display = 'none';
+
+  owSaveSectionCurves();
+  const savedSec = owActiveSec;
+
+  // Collecter tous les objets audio, section par section, triés par posX
+  const allObjs = [];
+  for (const sec of [...owSections].sort((a, b) => a.posY - b.posY)) {
+    owLoadSectionCurves(sec.id);
+    const grps = owGroups.filter(g => {
+      if (g.sectionId !== sec.id) return false;
+      if (!g.owTableObjets && interpGrpData[g.id]) owComputeGrpObjets(g);
+      return g.owTableObjets?.length;
+    });
+    for (const grp of grps) {
+      const parsed = owParseGrpXml(grp.id);
+      if (!parsed) continue;
+      const { ctn, zs } = parsed;
+      const sx0 = (grp._baseW !== undefined ? grp._baseW : grp.w) / ctn.ctnW;
+      for (const obj of grp.owTableObjets) {
+        const objPx    = grp.posX + (obj.posX * zs - ctn.ctnX * zs) * sx0;
+        const fileId   = obj._origId ?? obj.id;
+        allObjs.push({
+          file:      fileId + '.wav',
+          offsetSec: owScorePxToRealSec(0, objPx),
+          duree:     obj.duree > 0 ? obj.duree : 0.5,
+          gain:      obj.gain ?? 1
+        });
+      }
+    }
+  }
+  owLoadSectionCurves(savedSec);
+
+  if (!allObjs.length) { alert('Aucun objet audio dans la partition.'); return; }
+  allObjs.sort((a, b) => a.offsetSec - b.offsetSec);
+
+  const filesPerInterp = Math.ceil(allObjs.length / n);
+  if (filesPerInterp > k) {
+    if (!confirm(`${filesPerInterp} fichier(s) par interprète dépasse ${k} touches. Continuer ?`)) return;
+  }
+
+  const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+  const noteName   = m => NOTE_NAMES[((m % 12) + 12) % 12] + (Math.floor(m / 12) - 1);
+
+  // Mapping C4 en montant (indices pairs puis descendants)
+  function assignNotes(objs) {
+    const upper = Math.ceil(objs.length / 2);
+    return objs.map((o, i) => {
+      const note = i < upper ? 60 + i : 59 - (i - upper);
+      return { ...o, note, noteName: noteName(note) };
+    });
+  }
+
+  const partName   = (owFilePath || 'partition').split(/[/\\]/).pop().replace(/\.[^.]+$/, '');
+  const midiTracks = [];
+
+  for (let i = 0; i < n; i++) {
+    const objs = assignNotes(allObjs.slice(i * filesPerInterp, (i + 1) * filesPerInterp));
+
+    // JSON pour mcMidiKeyboard
+    const json  = {
+      interpreteIndex: i + 1,
+      nbFichiers:      objs.length,
+      nbTouches:       k,
+      mapping:         objs.map(o => ({ note: o.note, noteName: o.noteName, file: o.file, duree: o.duree, gain: o.gain }))
+    };
+    const jBlob = new Blob([JSON.stringify(json, null, 2)], { type: 'application/json' });
+    const jUrl  = URL.createObjectURL(jBlob);
+    const jA    = Object.assign(document.createElement('a'), { href: jUrl, download: `${partName}_interp${i + 1}.json` });
+    document.body.appendChild(jA); jA.click(); document.body.removeChild(jA);
+    URL.revokeObjectURL(jUrl);
+
+    midiTracks.push({
+      name:   `Interprète ${i + 1}`,
+      events: objs.map(o => ({
+        offsetSec:   o.offsetSec,
+        durationSec: o.duree,
+        note:        o.note,
+        velocity:    Math.max(1, Math.min(127, Math.round(o.gain * 100)))
+      }))
+    });
+  }
+
+  // Fichier MIDI
+  const mAb  = owBuildMidiFile(midiTracks);
+  const mUrl = URL.createObjectURL(new Blob([mAb], { type: 'audio/midi' }));
+  const mA   = Object.assign(document.createElement('a'), { href: mUrl, download: partName + '_midi.mid' });
+  document.body.appendChild(mA); mA.click(); document.body.removeChild(mA);
+  URL.revokeObjectURL(mUrl);
+
+  const st = document.getElementById('spFaustStatus');
+  if (st) st.textContent = `Export MIDI : ${n} JSON + 1 .mid — ${allObjs.length} objet(s)`;
+}
+
+function owBuildMidiFile(tracks) {
+  const PPQ   = 960;
+  const TEMPO = 500000;  // 120 BPM → µs/beat
+  const enc   = new TextEncoder();
+
+  function varLen(v) {
+    if (v < 0) v = 0;
+    const b = [v & 0x7f]; v >>>= 7;
+    while (v > 0) { b.unshift((v & 0x7f) | 0x80); v >>>= 7; }
+    return b;
+  }
+  const i16 = v => [(v >> 8) & 0xff, v & 0xff];
+  const i32 = v => [(v >> 24) & 0xff, (v >> 16) & 0xff, (v >> 8) & 0xff, v & 0xff];
+  const secToTicks = s => Math.round(s * PPQ * 1e6 / TEMPO);
+
+  function buildTrackData(rawEvents) {
+    rawEvents.sort((a, b) => a.tick - b.tick);
+    const data = []; let last = 0;
+    for (const ev of rawEvents) {
+      data.push(...varLen(ev.tick - last), ...ev.bytes);
+      last = ev.tick;
+    }
+    return data;
+  }
+
+  function metaStr(type, str) {
+    const b = [...enc.encode(str)];
+    return [0xff, type, ...varLen(b.length), ...b];
+  }
+
+  const tempoData = buildTrackData([
+    { tick: 0, bytes: metaStr(0x03, 'Tempo') },
+    { tick: 0, bytes: [0xff, 0x51, 0x03, (TEMPO >> 16) & 0xff, (TEMPO >> 8) & 0xff, TEMPO & 0xff] },
+    { tick: 0, bytes: [0xff, 0x2f, 0x00] }
+  ]);
+
+  const chunks = [
+    [0x4d, 0x54, 0x68, 0x64, ...i32(6), ...i16(1), ...i16(1 + tracks.length), ...i16(PPQ)],
+    [0x4d, 0x54, 0x72, 0x6b, ...i32(tempoData.length), ...tempoData]
+  ];
+
+  for (let i = 0; i < tracks.length; i++) {
+    const ch  = i % 16;
+    const raw = [{ tick: 0, bytes: metaStr(0x03, tracks[i].name) }];
+    for (const ev of tracks[i].events) {
+      const on  = secToTicks(ev.offsetSec);
+      const off = secToTicks(ev.offsetSec + (ev.durationSec || 0.5));
+      const nt  = Math.max(0, Math.min(127, ev.note));
+      const vel = Math.max(1, Math.min(127, ev.velocity));
+      raw.push({ tick: on,  bytes: [0x90 | ch, nt, vel] });
+      raw.push({ tick: off, bytes: [0x80 | ch, nt, 0]   });
+    }
+    const maxTick = raw.reduce((m, e) => Math.max(m, e.tick), 0);
+    raw.push({ tick: maxTick, bytes: [0xff, 0x2f, 0x00] });
+    const td = buildTrackData(raw);
+    chunks.push([0x4d, 0x54, 0x72, 0x6b, ...i32(td.length), ...td]);
+  }
+
+  return new Uint8Array(chunks.flat()).buffer;
 }
 
 // Interpolation linéaire 1D sur un tableau (xs trié croissant)
