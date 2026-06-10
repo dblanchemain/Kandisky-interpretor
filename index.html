@@ -2701,7 +2701,10 @@ async function owDoExportMidi() {
           file:      fileId + '.wav',
           offsetSec: owScorePxToRealSec(0, objPx),
           duree:     obj.duree > 0 ? obj.duree : 0.5,
-          gain:      obj.gain ?? 1
+          gain:      obj.gain ?? 1,
+          fadeType:  obj.fadein  || 'l',
+          fadeIn:    obj.fadeInLen  ?? 0.05,
+          fadeOut:   obj.fadeOutLen ?? 0.1
         });
       }
     }
@@ -2729,18 +2732,22 @@ async function owDoExportMidi() {
   }
 
   const partName   = (owFilePath || 'partition').split(/[/\\]/).pop().replace(/\.[^.]+$/, '');
+  const audiosBase = owFilePath.replace(/[/\\][^/\\]+$/, '') + '/Audios/interprete/';
   const midiTracks = [];
 
   for (let i = 0; i < n; i++) {
     const objs = assignNotes(allObjs.slice(i * filesPerInterp, (i + 1) * filesPerInterp));
 
-    // JSON pour mcMidiKeyboard
-    const json  = {
-      interpreteIndex: i + 1,
-      nbFichiers:      objs.length,
-      nbTouches:       k,
-      mapping:         objs.map(o => ({ note: o.note, noteName: o.noteName, file: o.file, duree: o.duree, gain: o.gain }))
-    };
+    // JSON compatible mcMidiKeyboard
+    const json = objs.map(o => ({
+      key:      o.note,
+      file:     audiosBase + o.file,
+      gain:     o.gain,
+      fadeType: o.fadeType,
+      fadeIn:   o.fadeIn,
+      fadeOut:  o.fadeOut,
+      oneShot:  true
+    }));
     const jBlob = new Blob([JSON.stringify(json, null, 2)], { type: 'application/json' });
     const jUrl  = URL.createObjectURL(jBlob);
     const jA    = Object.assign(document.createElement('a'), { href: jUrl, download: `${partName}_interp${i + 1}.json` });
