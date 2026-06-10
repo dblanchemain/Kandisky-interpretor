@@ -2773,7 +2773,7 @@ async function owDoExportMidi() {
     const objs = interpGroups[i];
     const json = objs.map(o => ({
       key:      o.note,
-      file:     'Audios/' + o.file,
+      file:     folderPath + '/Audios/' + o.file,
       gain:     o.gain,
       fadeType: o.fadeType,
       fadeIn:   o.fadeIn,
