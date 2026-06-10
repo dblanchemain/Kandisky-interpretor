@@ -2736,18 +2736,41 @@ async function owDoExportMidi() {
     });
   }
 
-  const partName   = (owFilePath || 'partition').split(/[/\\]/).pop().replace(/\.[^.]+$/, '');
-  const midiTracks = [];
+  const partName = (owFilePath || 'partition').split(/[/\\]/).pop().replace(/\.[^.]+$/, '');
+  const st       = document.getElementById('spFaustStatus');
 
-  // Résoudre tous les chemins absolus une seule fois (pour la copie future)
+  // Résoudre les chemins absolus (Audios/interprete/ en priorité)
+  for (const o of allObjs) {
+    o._absPath = await window.api.resolveAudioPath(owFilePath, o.file);
+  }
+
+  // Construire les groupes par interprète avec mapping de notes
+  const interpGroups = [];
   for (let i = 0; i < n; i++) {
-    const objs = assignNotes(allObjs.slice(i * filesPerInterp, (i + 1) * filesPerInterp));
+    interpGroups.push(assignNotes(allObjs.slice(i * filesPerInterp, (i + 1) * filesPerInterp)));
+  }
 
-    await Promise.all(objs.map(async o => {
-      o._absPath = await window.api.resolveAudioPath(owFilePath, o.file);
-    }));
+  // Dialogue natif : choisir le dossier d'export
+  if (st) st.textContent = 'Export MIDI : choix du dossier…';
+  const folderPath = await window.api.midiExportChooseFolder(partName + '_midi');
+  if (!folderPath) { if (st) st.textContent = ''; return; }
 
-    // JSON compatible mcMidiKeyboard — chemins relatifs au dossier d'export (Audios/)
+  // Copier les fichiers audio (Audios/interprete/) → dossier/Audios/ (dédupliqués)
+  const copied = new Set();
+  for (const objs of interpGroups) {
+    for (const o of objs) {
+      if (o._absPath && !copied.has(o.file)) {
+        if (st) st.textContent = `Export MIDI : copie ${o.file}…`;
+        await window.api.midiExportCopyAudio(folderPath, o._absPath, o.file);
+        copied.add(o.file);
+      }
+    }
+  }
+
+  // Sauvegarder les JSON mcMidiKeyboard
+  const midiTracks = [];
+  for (let i = 0; i < n; i++) {
+    const objs = interpGroups[i];
     const json = objs.map(o => ({
       key:      o.note,
       file:     'Audios/' + o.file,
@@ -2757,12 +2780,8 @@ async function owDoExportMidi() {
       fadeOut:  o.fadeOut,
       oneShot:  true
     }));
-    const jBlob = new Blob([JSON.stringify(json, null, 2)], { type: 'application/json' });
-    const jUrl  = URL.createObjectURL(jBlob);
-    const jA    = Object.assign(document.createElement('a'), { href: jUrl, download: `${partName}_interp${i + 1}.json` });
-    document.body.appendChild(jA); jA.click(); document.body.removeChild(jA);
-    URL.revokeObjectURL(jUrl);
-
+    const jsonStr = new TextEncoder().encode(JSON.stringify(json, null, 2));
+    await window.api.midiExportSaveFile(folderPath, `${partName}_interp${i + 1}.json`, jsonStr);
     midiTracks.push({
       name:   `Interprète ${i + 1}`,
       events: objs.map(o => ({
@@ -2774,15 +2793,11 @@ async function owDoExportMidi() {
     });
   }
 
-  // Fichier MIDI
-  const mAb  = owBuildMidiFile(midiTracks);
-  const mUrl = URL.createObjectURL(new Blob([mAb], { type: 'audio/midi' }));
-  const mA   = Object.assign(document.createElement('a'), { href: mUrl, download: partName + '_midi.mid' });
-  document.body.appendChild(mA); mA.click(); document.body.removeChild(mA);
-  URL.revokeObjectURL(mUrl);
+  // Sauvegarder le fichier MIDI
+  const midiAb = owBuildMidiFile(midiTracks);
+  await window.api.midiExportSaveFile(folderPath, partName + '_midi.mid', new Uint8Array(midiAb));
 
-  const st = document.getElementById('spFaustStatus');
-  if (st) st.textContent = `Export MIDI : ${n} JSON + 1 .mid — ${allObjs.length} objet(s)`;
+  if (st) st.textContent = `Export MIDI OK — ${n} JSON + 1 .mid + ${copied.size} audio(s) → ${folderPath.split(/[/\\]/).pop()}/`;
 }
 
 function owBuildMidiFile(tracks) {
