@@ -202,6 +202,35 @@ ipcMain.handle('audiosSaveFile', (_, partitionPath, subfolder, filename, data) =
   } catch(e) { console.error('audiosSaveFile:', e); return false; }
 });
 
+// ── Export MIDI : dossier + fichiers ─────────────────────────────────────────
+ipcMain.handle('midiExportChooseFolder', (_, defaultName) => {
+  return dialog.showSaveDialog(win, {
+    defaultPath: path.join(app.getPath('home'), defaultName || 'export_midi'),
+    buttonLabel: 'Créer le dossier',
+    properties:  ['createDirectory']
+  }).then(result => {
+    if (result.canceled || !result.filePath) return null;
+    const folderPath = result.filePath;
+    fs.mkdirSync(path.join(folderPath, 'Audios'), { recursive: true });
+    return folderPath;
+  });
+});
+
+ipcMain.handle('midiExportSaveFile', (_, folderPath, filename, data) => {
+  try {
+    fs.writeFileSync(path.join(folderPath, filename), Buffer.from(data));
+    return true;
+  } catch(e) { console.error('midiExportSaveFile:', e); return false; }
+});
+
+ipcMain.handle('midiExportCopyAudio', (_, folderPath, srcAbsPath, destFilename) => {
+  try {
+    if (!srcAbsPath || !fs.existsSync(srcAbsPath)) return false;
+    fs.copyFileSync(srcAbsPath, path.join(folderPath, 'Audios', destFilename));
+    return true;
+  } catch(e) { console.error('midiExportCopyAudio:', e); return false; }
+});
+
 // ── Binaires embarqués (resources/bin/<os>/) ──────────────────────────────────
 function findBundledBin(name) {
   const sub = process.platform === 'win32' ? 'win'

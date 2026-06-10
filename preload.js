@@ -23,4 +23,9 @@ contextBridge.exposeInMainWorld('api', {
 
   // Rubberband tempo : time-stretch un fichier WAV selon une courbe de tempo
   processTempoNote: (info) => ipcRenderer.invoke('processTempoNote', info),
+
+  // Export MIDI : dossier natif + sauvegarde fichiers
+  midiExportChooseFolder: (defaultName)                    => ipcRenderer.invoke('midiExportChooseFolder', defaultName),
+  midiExportSaveFile:     (folderPath, filename, data)     => ipcRenderer.invoke('midiExportSaveFile', folderPath, filename, data),
+  midiExportCopyAudio:    (folderPath, src, destFilename)  => ipcRenderer.invoke('midiExportCopyAudio', folderPath, src, destFilename),
 });
