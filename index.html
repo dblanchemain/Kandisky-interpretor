@@ -1033,6 +1033,7 @@ let owFilePath   = null;
 let owImagesDir  = '';
 let owSrcDir     = '';   // répertoire source d'où la partition a été chargée (≠ owFilePath après SaveAs)
 let interpGrpData = {};   // {grpId: {xml, imgBase}} — cache XMLs de groupe
+let _owPendingGrpLoads = 0; // groupes en attente de chargement XML depuis main
 let owTableObjets = {};  // {grpId: [{posX,posY,...}]} — objets audio transformés par groupe
 let owModified        = false;
 let owIsOriginalFile  = false;  // true = fichier KandiskyScore sans <activeSec> → protéger de l'écrasement
@@ -1363,8 +1364,10 @@ function owParseData(txt, label) {
     owRebuildTempoPoints();
     // Charger les XMLs de groupe pour drawObjets
     if (typeof window.api !== 'undefined') {
-      owGroups.forEach(grp => {
-        if (grp.name) window.api.send('toMain', `interpLoadGrp;${grp.id};${grp.name};${grp.dir||''};${owSrcDir}`);
+      const grpsToLoad = owGroups.filter(g => !!g.name);
+      _owPendingGrpLoads = grpsToLoad.length;
+      grpsToLoad.forEach(grp => {
+        window.api.send('toMain', `interpLoadGrp;${grp.id};${grp.name};${grp.dir||''};${owSrcDir}`);
       });
     }
   } catch(err) { alert('Erreur de chargement : ' + err.message); }
@@ -1863,6 +1866,8 @@ async function owInitFaust() {
     if (status) status.textContent = `Faust : prêt (${layout}, ${window.owWamSpat.P} canaux)`;
     console.log('[Spatialisation] Faust initialisé :', layout, window.owWamSpat);
     owAudioSend({ cmd: 'set_device', device: owSonDeviceIndex, channels: owSpatialPrefs.nbCanaux });
+    // Préparer automatiquement l'audio spatial si une partition est déjà chargée
+    if (owFilePath) owRefreshAll().catch(e => console.warn('[Spat] préparation auto:', e));
   } catch(err) {
     if (status) status.textContent = 'Faust : erreur — ' + err.message;
     console.error('[Spatialisation] init Faust :', err);
@@ -4203,6 +4208,11 @@ if (typeof window.api !== 'undefined') {
           owNextObjGlobalId += _parsed ? _parsed.audio.length : 0;
         }
         owComputeGrpObjets(grp);
+        // Déclencher la préparation audio quand tous les groupes sont chargés
+        _owPendingGrpLoads = Math.max(0, _owPendingGrpLoads - 1);
+        if (_owPendingGrpLoads === 0 && window.owWamSpat && owFilePath) {
+          setTimeout(() => owRefreshAll().catch(e => console.warn('[Spat] préparation auto:', e)), 100);
+        }
         break;
       }
       case 'audioServerReady':
@@ -4480,25 +4490,45 @@ function readPart() {
   }, frameMs);
 }
 
-async function owRefreshAll() {
-  if (owActiveSec === null) return;
-  const grps = owGroups.filter(g => g.sectionId === owActiveSec);
-  const status = document.getElementById('spFaustStatus');
+let _owRefreshAllRunning = false;
 
-  for (const grp of grps) {
-    const div = document.getElementById('grp' + grp.id);
-    if (div) {
-      const d = interpGrpData[grp.id];
-      if (d) drawObjets(d.xml, div, d.imgBase);
-      owComputeGrpObjets(grp);
-      owDrawTransformOverlay(grp, div);
+async function owRefreshAll() {
+  if (!owFilePath || _owRefreshAllRunning) return;
+  _owRefreshAllRunning = true;
+  const status   = document.getElementById('spFaustStatus');
+  owSaveSectionCurves();
+  const savedSec = owActiveSec;
+  let total = 0;
+
+  try {
+    for (const sec of [...owSections].sort((a, b) => a.posY - b.posY)) {
+      owLoadSectionCurves(sec.id);
+      const grps = owGroups.filter(g => g.sectionId === sec.id);
+      for (const grp of grps) {
+        // Redessiner l'UI uniquement pour la section active
+        if (sec.id === savedSec) {
+          const div = document.getElementById('grp' + grp.id);
+          if (div) {
+            const d = interpGrpData[grp.id];
+            if (d) drawObjets(d.xml, div, d.imgBase);
+            owComputeGrpObjets(grp);
+            owDrawTransformOverlay(grp, div);
+          }
+        } else if (!grp.owTableObjets && interpGrpData[grp.id]) {
+          owComputeGrpObjets(grp);
+        }
+        if (grp.owTableObjets?.length) {
+          if (status) status.textContent = `Préparation audio : ${grp.name || grp.id}…`;
+          await owMiseANiveauComplete(grp);
+          total++;
+        }
+      }
     }
-    if (grp.owTableObjets?.length) {
-      if (status) status.textContent = `Refresh : groupe ${grp.name || grp.id}…`;
-      await owMiseANiveauComplete(grp);
-    }
+  } finally {
+    owLoadSectionCurves(savedSec);
+    _owRefreshAllRunning = false;
+    if (status) status.textContent = `Audio prêt : ${total} groupe(s) traité(s)`;
   }
-  if (status) status.textContent = `Refresh : ${grps.length} groupe(s) traité(s)`;
 }
 
 // La connexion WebSocket démarre quand main.js envoie audioServerReady;PORT
