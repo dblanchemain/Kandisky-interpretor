@@ -21,9 +21,13 @@
     "electron": "^25.4.0"
   },
   "dependencies": {
-    "electron-squirrel-startup": "^1.0.0"
+    "electron-squirrel-startup": "^1.0.0",
+    "playwright-core": "^1.60.0"
   },
   "config": {
     "forge": "./forge.config.js"
+  },
+  "allowScripts": {
+    "electron@25.9.8": true
   }
 }
