@@ -226,7 +226,9 @@ ipcMain.handle('midiExportSaveFile', (_, folderPath, filename, data) => {
 ipcMain.handle('midiExportCopyAudio', (_, folderPath, srcAbsPath, destFilename) => {
   try {
     if (!srcAbsPath || !fs.existsSync(srcAbsPath)) return false;
-    fs.copyFileSync(srcAbsPath, path.join(folderPath, 'Audios', destFilename));
+    const destPath = path.join(folderPath, 'Audios', destFilename);
+    fs.mkdirSync(path.dirname(destPath), { recursive: true });
+    fs.copyFileSync(srcAbsPath, destPath);
     return true;
   } catch(e) { console.error('midiExportCopyAudio:', e); return false; }
 });

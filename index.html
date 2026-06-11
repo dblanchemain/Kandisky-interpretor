@@ -2755,27 +2755,26 @@ async function owDoExportMidi() {
   const folderPath = await window.api.midiExportChooseFolder(partName + '_midi');
   if (!folderPath) { if (st) st.textContent = ''; return; }
 
-  // Copier les fichiers audio (Audios/interprete/) → dossier/Audios/ (dédupliqués)
-  const copied = new Set();
-  for (const objs of interpGroups) {
-    for (const o of objs) {
-      if (o._absPath && !copied.has(o.file)) {
-        if (st) st.textContent = `Export MIDI : copie ${o.file}…`;
-        await window.api.midiExportCopyAudio(folderPath, o._absPath, o.file);
-        copied.add(o.file);
-      }
-    }
-  }
-
-  // Sauvegarder les JSON mcMidiKeyboard
+  // Copier les audios et sauvegarder les JSON, un sous-dossier Audios/ par interprète
   const midiTracks = [];
+  let totalCopied = 0;
   for (let i = 0; i < n; i++) {
     const objs = interpGroups[i];
+    const interpFolder = `${partName}_interp${i + 1}`;
+    const copiedInterp = new Set();
+    for (const o of objs) {
+      if (o._absPath && !copiedInterp.has(o.file)) {
+        if (st) st.textContent = `Export MIDI : copie ${o.file}…`;
+        await window.api.midiExportCopyAudio(folderPath, o._absPath, `${interpFolder}/${o.file}`);
+        copiedInterp.add(o.file);
+        totalCopied++;
+      }
+    }
     const json = {
       nbCanaux: owSpatialPrefs?.nbCanaux ?? 2,
       keys: objs.map(o => ({
         key:      o.note,
-        file:     folderPath + '/Audios/' + o.file,
+        file:     `${folderPath}/Audios/${interpFolder}/${o.file}`,
         gain:     o.gain,
         fadeType: o.fadeType,
         fadeIn:   o.fadeIn,
@@ -2800,7 +2799,7 @@ async function owDoExportMidi() {
   const midiAb = owBuildMidiFile(midiTracks);
   await window.api.midiExportSaveFile(folderPath, partName + '_midi.mid', new Uint8Array(midiAb));
 
-  if (st) st.textContent = `Export MIDI OK — ${n} JSON + 1 .mid + ${copied.size} audio(s) → ${folderPath.split(/[/\\]/).pop()}/`;
+  if (st) st.textContent = `Export MIDI OK — ${n} JSON + 1 .mid + ${totalCopied} audio(s) → ${folderPath.split(/[/\\]/).pop()}/`;
 }
 
 function owBuildMidiFile(tracks) {
