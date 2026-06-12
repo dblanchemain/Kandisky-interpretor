@@ -707,8 +707,14 @@
       </label>
     </div>
     <div>
-      <label>Touches par clavier :
+      <label>Touches par bank :
         <input id="midiExportK" type="number" min="1" max="88" value="12"
+               style="width:60px;margin-left:4px;"/>
+      </label>
+    </div>
+    <div>
+      <label>Polyphonie max :
+        <input id="midiExportPoly" type="number" min="1" max="32" value="8"
                style="width:60px;margin-left:4px;"/>
       </label>
     </div>
@@ -2675,11 +2681,13 @@ function owExportMidi() {
 }
 
 async function owDoExportMidi() {
-  const n   = parseInt(document.getElementById('midiExportN').value, 10);
-  const k   = parseInt(document.getElementById('midiExportK').value, 10);
-  const msg = document.getElementById('midiExportMsg');
-  if (!(n >= 1 && n <= 16)) { msg.textContent = 'N doit être entre 1 et 16.'; return; }
-  if (!(k >= 1 && k <= 88)) { msg.textContent = 'K doit être entre 1 et 88.'; return; }
+  const n    = parseInt(document.getElementById('midiExportN').value, 10);
+  const k    = parseInt(document.getElementById('midiExportK').value, 10);
+  const poly = parseInt(document.getElementById('midiExportPoly').value, 10) || 8;
+  const msg  = document.getElementById('midiExportMsg');
+  if (!(n >= 1 && n <= 16))       { msg.textContent = 'N doit être entre 1 et 16.'; return; }
+  if (!(k >= 1 && k <= 88))       { msg.textContent = 'K doit être entre 1 et 88.'; return; }
+  if (!(poly >= 1 && poly <= 32)) { msg.textContent = 'Polyphonie doit être entre 1 et 32.'; return; }
   document.getElementById('midiExportPopup').style.display = 'none';
 
   owSaveSectionCurves();
@@ -2720,9 +2728,6 @@ async function owDoExportMidi() {
   allObjs.sort((a, b) => a.offsetSec - b.offsetSec);
 
   const filesPerInterp = Math.ceil(allObjs.length / n);
-  if (filesPerInterp > k) {
-    if (!confirm(`${filesPerInterp} fichier(s) par interprète dépasse ${k} touches. Continuer ?`)) return;
-  }
 
   const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
   const noteName   = m => NOTE_NAMES[((m % 12) + 12) % 12] + (Math.floor(m / 12) - 1);
@@ -2755,12 +2760,15 @@ async function owDoExportMidi() {
   const folderPath = await window.api.midiExportChooseFolder(partName + '_midi');
   if (!folderPath) { if (st) st.textContent = ''; return; }
 
-  // Copier les audios et sauvegarder les JSON, un sous-dossier Audios/ par interprète
+  // Copier les audios et sauvegarder un JSON par bank, un sous-dossier Audios/ par interprète
   const midiTracks = [];
-  let totalCopied = 0;
+  let totalCopied  = 0;
   for (let i = 0; i < n; i++) {
-    const objs = interpGroups[i];
-    const interpFolder = `${partName}_interp${i + 1}`;
+    const objs        = interpGroups[i];
+    const interpName  = `${partName}_interp${i + 1}`;
+    const interpFolder = interpName;
+
+    // Copier les fichiers audio (une seule fois par fichier)
     const copiedInterp = new Set();
     for (const o of objs) {
       if (o._absPath && !copiedInterp.has(o.file)) {
@@ -2770,36 +2778,58 @@ async function owDoExportMidi() {
         totalCopied++;
       }
     }
-    const json = {
-      nbCanaux: owSpatialPrefs?.nbCanaux ?? 2,
-      keys: objs.map(o => ({
-        key:      o.note,
-        file:     `${folderPath}/Audios/${interpFolder}/${o.file}`,
-        gain:     o.gain,
-        fadeType: o.fadeType,
-        fadeIn:   o.fadeIn,
-        fadeOut:  o.fadeOut,
-        oneShot:  true
-      }))
-    };
-    const jsonStr = new TextEncoder().encode(JSON.stringify(json, null, 2));
-    await window.api.midiExportSaveFile(folderPath, `${partName}_interp${i + 1}.json`, jsonStr);
-    midiTracks.push({
-      name:   `Interprète ${i + 1}`,
-      events: objs.map(o => ({
+
+    // Générer un JSON par bank
+    const bankCount = Math.ceil(objs.length / k);
+    for (let b = 0; b < bankCount; b++) {
+      const bankObjs = objs.slice(b * k, (b + 1) * k);
+      const json = {
+        nbCanaux:   owSpatialPrefs?.nbCanaux ?? 2,
+        polyphonie: poly,
+        keys: bankObjs.map(o => ({
+          key:      o.note,
+          file:     `${folderPath}/Audios/${interpFolder}/${o.file}`,
+          gain:     o.gain,
+          fadeType: o.fadeType,
+          fadeIn:   o.fadeIn,
+          fadeOut:  o.fadeOut,
+          oneShot:  true
+        }))
+      };
+      const jsonStr = new TextEncoder().encode(JSON.stringify(json, null, 2));
+      await window.api.midiExportSaveFile(folderPath, `${interpName}_bank${b + 1}.json`, jsonStr);
+    }
+
+    // Construire les événements MIDI de cette piste
+    const trackEvents = [];
+    for (const o of objs) {
+      trackEvents.push({
         offsetSec:   o.offsetSec,
         durationSec: o.duree,
         note:        o.note,
         velocity:    Math.max(1, Math.min(127, Math.round(o.gain * 100)))
-      }))
-    });
+      });
+    }
+    // Insérer des Program Change avant la 1re note de chaque bank (sauf la 1re)
+    for (let b = 1; b < bankCount; b++) {
+      const firstNote = objs[b * k];
+      if (firstNote) {
+        trackEvents.push({
+          type:      'pc',
+          program:   b,
+          offsetSec: Math.max(0, firstNote.offsetSec - 0.01)
+        });
+      }
+    }
+    midiTracks.push({ name: `Interprète ${i + 1}`, events: trackEvents });
   }
 
   // Sauvegarder le fichier MIDI
   const midiAb = owBuildMidiFile(midiTracks);
   await window.api.midiExportSaveFile(folderPath, partName + '_midi.mid', new Uint8Array(midiAb));
 
-  if (st) st.textContent = `Export MIDI OK — ${n} JSON + 1 .mid + ${totalCopied} audio(s) → ${folderPath.split(/[/\\]/).pop()}/`;
+  const numBanks = Math.ceil(filesPerInterp / k);
+  if (st) st.textContent = `Export MIDI OK — ${n} interp. × ${numBanks} banks + 1 .mid + ${totalCopied} audio(s) → ${folderPath.split(/[/\\]/).pop()}/`;
 }
 
 function owBuildMidiFile(tracks) {
@@ -2847,6 +2877,10 @@ function owBuildMidiFile(tracks) {
     const ch  = i % 16;
     const raw = [{ tick: 0, bytes: metaStr(0x03, tracks[i].name) }];
     for (const ev of tracks[i].events) {
+      if (ev.type === 'pc') {
+        raw.push({ tick: secToTicks(ev.offsetSec), bytes: [0xc0 | ch, Math.max(0, Math.min(127, ev.program ?? 0))] });
+        continue;
+      }
       const on  = secToTicks(ev.offsetSec);
       const off = secToTicks(ev.offsetSec + (ev.durationSec || 0.5));
       const nt  = Math.max(0, Math.min(127, ev.note));
