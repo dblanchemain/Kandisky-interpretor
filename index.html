@@ -2823,8 +2823,7 @@ async function owDoExportMidi() {
     midiTracks.push({ name: `Interprète ${i + 1}`, events: trackEvents });
   }
 
-  // Piste "Banks" : notes courtes aux changements de bank (visibilité MuseScore)
-  const _bankPitches = [60, 62, 64, 65, 67, 69, 71, 72]; // C4 D4 E4 F4 G4 A4 B4 C5
+  // Piste "Banks" : Program Change aux changements de bank (visibilité DAW/MuseScore)
   const _bankMarkerMap = new Map();
   for (const track of midiTracks) {
     for (const ev of track.events) {
@@ -2838,9 +2837,8 @@ async function owDoExportMidi() {
   for (const [text, offsetSec] of [..._bankMarkerMap.entries()].sort((a, b) => a[1] - b[1])) {
     const mb = text.match(/^bank(\d+)$/i);
     if (!mb) continue;
-    const pitch = _bankPitches[(parseInt(mb[1]) - 1) % _bankPitches.length];
     _banksEvents.push({ type: 'marker', text, offsetSec });
-    _banksEvents.push({ offsetSec, durationSec: 0.25, note: pitch, velocity: 80 });
+    _banksEvents.push({ type: 'pc', program: parseInt(mb[1]) - 1, offsetSec });
   }
   if (_banksEvents.length) midiTracks.push({ name: 'Banks', events: _banksEvents });
 
