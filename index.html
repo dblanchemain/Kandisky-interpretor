@@ -2846,8 +2846,12 @@ async function owDoExportMidi() {
   const midiAb = owBuildMidiFile(midiTracks);
   await window.api.midiExportSaveFile(folderPath, partName + '_midi.mid', new Uint8Array(midiAb));
 
+  // Exporter le MusicXML des changements de bank (repères lisibles dans MuseScore)
+  const _xmlStr = owBuildMusicXml(_bankMarkerMap, 500000);
+  if (_xmlStr) await window.api.midiExportSaveFile(folderPath, partName + '_banks.xml', new TextEncoder().encode(_xmlStr));
+
   const numBanks = Math.ceil(filesPerInterp / k);
-  if (st) st.textContent = `Export MIDI OK — ${n} interp. × ${numBanks} banks + 1 .mid + ${totalCopied} audio(s) → ${folderPath.split(/[/\\]/).pop()}/`;
+  if (st) st.textContent = `Export MIDI OK — ${n} interp. × ${numBanks} banks + 1 .mid${_xmlStr ? ' + 1 .xml' : ''} + ${totalCopied} audio(s) → ${folderPath.split(/[/\\]/).pop()}/`;
 }
 
 function owBuildMidiFile(tracks) {
@@ -2917,6 +2921,60 @@ function owBuildMidiFile(tracks) {
   }
 
   return new Uint8Array(chunks.flat()).buffer;
+}
+
+function owBuildMusicXml(bankMarkerMap, tempo) {
+  const DPB     = 4;                      // divisions par noire
+  const DPBar   = 4 * DPB;               // 4/4 → 16 div/mesure
+  const BPM     = Math.round(60e6 / tempo);
+  const secPerD = tempo / 1e6 / DPB;
+  const secToD  = s => Math.round(s / secPerD);
+  const encXml  = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  const changes = [...bankMarkerMap.entries()]
+    .sort((a, b) => a[1] - b[1])
+    .map(([text, offsetSec]) => ({ text, div: secToD(offsetSec) }));
+  if (!changes.length) return null;
+
+  const nMeasures = Math.ceil((changes.at(-1).div + DPBar) / DPBar);
+
+  function rests(n) {
+    let s = '', r = n;
+    for (const [d, t] of [[DPBar,'whole'],[DPBar/2,'half'],[DPB,'quarter'],[DPB/2,'eighth'],[DPB/4,'16th']])
+      while (r >= d && d > 0) { s += `      <note><rest/><duration>${d}</duration><type>${t}</type></note>\n`; r -= d; }
+    return s;
+  }
+
+  let x = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+  x += `<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 4.0 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">\n`;
+  x += `<score-partwise version="4.0">\n`;
+  x += `  <part-list><score-part id="P1"><part-name>Banks</part-name></score-part></part-list>\n`;
+  x += `  <part id="P1">\n`;
+
+  for (let m = 0; m < nMeasures; m++) {
+    const mS = m * DPBar;
+    x += `    <measure number="${m + 1}">\n`;
+    if (m === 0) {
+      x += `      <attributes><divisions>${DPB}</divisions><key><fifths>0</fifths></key>`;
+      x += `<time><beats>4</beats><beat-type>4</beat-type></time>`;
+      x += `<clef><sign>G</sign><line>2</line></clef></attributes>\n`;
+      x += `      <direction placement="above"><direction-type><metronome>`;
+      x += `<beat-unit>quarter</beat-unit><per-minute>${BPM}</per-minute>`;
+      x += `</metronome></direction-type><sound tempo="${BPM}"/></direction>\n`;
+    }
+    const local = changes.filter(c => c.div >= mS && c.div < mS + DPBar);
+    let pos = 0;
+    for (const c of local) {
+      x += rests(c.div - mS - pos);
+      x += `      <direction placement="above"><direction-type><rehearsal>${encXml(c.text)}</rehearsal></direction-type></direction>\n`;
+      pos = c.div - mS;
+    }
+    x += rests(DPBar - pos);
+    x += `    </measure>\n`;
+  }
+
+  x += `  </part>\n</score-partwise>\n`;
+  return x;
 }
 
 // Interpolation linéaire 1D sur un tableau (xs trié croissant)
