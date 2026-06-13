@@ -2810,15 +2810,15 @@ async function owDoExportMidi() {
         velocity:    Math.max(1, Math.min(127, Math.round(o.gain * 100)))
       });
     }
-    // Insérer des Program Change avant la 1re note de chaque bank (sauf la 1re)
+    // Marker bank1 au début pour un redémarrage propre
+    trackEvents.push({ type: 'marker', text: 'bank1', offsetSec: 0 });
+    // Insérer marker + Program Change avant la 1re note de chaque bank (sauf la 1re)
     for (let b = 1; b < bankCount; b++) {
       const firstNote = objs[b * k];
       if (firstNote) {
-        trackEvents.push({
-          type:      'pc',
-          program:   b,
-          offsetSec: Math.max(0, firstNote.offsetSec - 0.01)
-        });
+        const t = Math.max(0, firstNote.offsetSec - 0.01);
+        trackEvents.push({ type: 'marker', text: `bank${b + 1}`, offsetSec: t });
+        trackEvents.push({ type: 'pc', program: b, offsetSec: t });
       }
     }
     midiTracks.push({ name: `Interprète ${i + 1}`, events: trackEvents });
@@ -2877,6 +2877,10 @@ function owBuildMidiFile(tracks) {
     const ch  = i % 16;
     const raw = [{ tick: 0, bytes: metaStr(0x03, tracks[i].name) }];
     for (const ev of tracks[i].events) {
+      if (ev.type === 'marker') {
+        raw.push({ tick: secToTicks(ev.offsetSec), bytes: metaStr(0x06, ev.text) });
+        continue;
+      }
       if (ev.type === 'pc') {
         raw.push({ tick: secToTicks(ev.offsetSec), bytes: [0xc0 | ch, Math.max(0, Math.min(127, ev.program ?? 0))] });
         continue;
