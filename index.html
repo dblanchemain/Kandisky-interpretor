@@ -2991,15 +2991,16 @@ function owBuildMusicXml(interpGroups, interpMarkers, tempo) {
           continue;
         }
         const nd = ev.d;
-        if (nd.div < pos) continue;                            // note en chevauchement : ignorée
-        if (nd.div > pos) { x += fillRests(nd.div - pos); }
-        const cap  = Math.min(nd.dur, mE - nd.div);
+        const startDiv = Math.max(nd.div, pos);
+        if (startDiv >= mE) continue;
+        if (startDiv > pos) x += fillRests(startDiv - pos);
+        const cap  = Math.min(nd.dur, mE - startDiv);
         const [sd, st] = snapDur(cap);
         const s = nd.midi % 12, oct = Math.floor(nd.midi / 12) - 1;
         x += `<note><pitch><step>${STEP[s]}</step>`;
         if (ALTER[s]) x += `<alter>${ALTER[s]}</alter>`;
         x += `<octave>${oct}</octave></pitch><duration>${sd}</duration><type>${st}</type></note>`;
-        pos = nd.div + sd;
+        pos = startDiv + sd;
       }
       if (pos < mE) x += fillRests(mE - pos);
       x += `</measure>\n`;
