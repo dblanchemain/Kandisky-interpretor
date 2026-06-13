@@ -2846,8 +2846,11 @@ async function owDoExportMidi() {
   const midiAb = owBuildMidiFile(midiTracks);
   await window.api.midiExportSaveFile(folderPath, partName + '_midi.mid', new Uint8Array(midiAb));
 
-  // Exporter le MusicXML des changements de bank (repères lisibles dans MuseScore)
-  const _xmlStr = owBuildMusicXml(_bankMarkerMap, 500000);
+  // Exporter le MusicXML : notes + repères de bank (lisibles dans MuseScore)
+  const _interpMarkers = midiTracks.slice(0, n).map(t =>
+    t.events.filter(e => e.type === 'marker').map(e => ({ text: e.text, offsetSec: e.offsetSec }))
+  );
+  const _xmlStr = owBuildMusicXml(interpGroups, _interpMarkers, 500000);
   if (_xmlStr) await window.api.midiExportSaveFile(folderPath, partName + '_banks.xml', new TextEncoder().encode(_xmlStr));
 
   const numBanks = Math.ceil(filesPerInterp / k);
@@ -2923,57 +2926,87 @@ function owBuildMidiFile(tracks) {
   return new Uint8Array(chunks.flat()).buffer;
 }
 
-function owBuildMusicXml(bankMarkerMap, tempo) {
-  const DPB     = 4;                      // divisions par noire
-  const DPBar   = 4 * DPB;               // 4/4 → 16 div/mesure
-  const BPM     = Math.round(60e6 / tempo);
-  const secPerD = tempo / 1e6 / DPB;
-  const secToD  = s => Math.round(s / secPerD);
-  const encXml  = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+function owBuildMusicXml(interpGroups, interpMarkers, tempo) {
+  const DPB    = 4;
+  const DPBar  = 4 * DPB;
+  const BPM    = Math.round(60e6 / tempo);
+  const sSec   = tempo / 1e6 / DPB;
+  const secToD = s => Math.round(s / sSec);
+  const enc    = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
-  const changes = [...bankMarkerMap.entries()]
-    .sort((a, b) => a[1] - b[1])
-    .map(([text, offsetSec]) => ({ text, div: secToD(offsetSec) }));
-  if (!changes.length) return null;
+  const STEP  = ['C','C','D','D','E','F','F','G','G','A','A','B'];
+  const ALTER = [ 0,  1,  0,  1,  0,  0,  1,  0,  1,  0,  1,  0];
 
-  const nMeasures = Math.ceil((changes.at(-1).div + DPBar) / DPBar);
+  function snapDur(d) {
+    for (const [n,t] of [[DPBar,'whole'],[DPBar/2,'half'],[DPB,'quarter'],[DPB/2,'eighth'],[DPB/4,'16th']])
+      if (d >= n && n > 0) return [n, t];
+    return [DPB/4,'16th'];
+  }
 
-  function rests(n) {
+  function fillRests(n) {
     let s = '', r = n;
-    for (const [d, t] of [[DPBar,'whole'],[DPBar/2,'half'],[DPB,'quarter'],[DPB/2,'eighth'],[DPB/4,'16th']])
-      while (r >= d && d > 0) { s += `      <note><rest/><duration>${d}</duration><type>${t}</type></note>\n`; r -= d; }
+    for (const [d,t] of [[DPBar,'whole'],[DPBar/2,'half'],[DPB,'quarter'],[DPB/2,'eighth'],[DPB/4,'16th']])
+      while (r >= d && d > 0) { s += `<note><rest/><duration>${d}</duration><type>${t}</type></note>`; r -= d; }
     return s;
   }
 
+  let lastDiv = 0;
+  for (const objs of interpGroups)
+    for (const o of objs) lastDiv = Math.max(lastDiv, secToD(o.offsetSec + (o.duree || 0.5)));
+  const nM = Math.max(1, Math.ceil((lastDiv + DPBar) / DPBar));
+  const nI = interpGroups.length;
+
   let x = `<?xml version="1.0" encoding="UTF-8"?>\n`;
   x += `<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 4.0 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">\n`;
-  x += `<score-partwise version="4.0">\n`;
-  x += `  <part-list><score-part id="P1"><part-name>Banks</part-name></score-part></part-list>\n`;
-  x += `  <part id="P1">\n`;
+  x += `<score-partwise version="4.0"><part-list>\n`;
+  for (let i = 0; i < nI; i++)
+    x += `<score-part id="P${i+1}"><part-name>Interprète ${i+1}</part-name></score-part>\n`;
+  x += `</part-list>\n`;
 
-  for (let m = 0; m < nMeasures; m++) {
-    const mS = m * DPBar;
-    x += `    <measure number="${m + 1}">\n`;
-    if (m === 0) {
-      x += `      <attributes><divisions>${DPB}</divisions><key><fifths>0</fifths></key>`;
-      x += `<time><beats>4</beats><beat-type>4</beat-type></time>`;
-      x += `<clef><sign>G</sign><line>2</line></clef></attributes>\n`;
-      x += `      <direction placement="above"><direction-type><metronome>`;
-      x += `<beat-unit>quarter</beat-unit><per-minute>${BPM}</per-minute>`;
-      x += `</metronome></direction-type><sound tempo="${BPM}"/></direction>\n`;
+  for (let i = 0; i < nI; i++) {
+    const notes = interpGroups[i]
+      .map(o => ({ div: secToD(o.offsetSec), dur: Math.max(1, secToD(o.duree || 0.5)), midi: o.note }))
+      .sort((a, b) => a.div - b.div);
+    const marks = (interpMarkers[i] || []).map(m => ({ div: secToD(m.offsetSec), text: m.text }));
+
+    x += `<part id="P${i+1}">\n`;
+    for (let m = 0; m < nM; m++) {
+      const mS = m * DPBar, mE = mS + DPBar;
+      x += `<measure number="${m+1}">`;
+      if (m === 0)
+        x += `<attributes><divisions>${DPB}</divisions><key><fifths>0</fifths></key><time><beats>4</beats><beat-type>4</beat-type></time><clef><sign>G</sign><line>2</line></clef></attributes>`
+           + `<direction placement="above"><direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>${BPM}</per-minute></metronome></direction-type><sound tempo="${BPM}"/></direction>`;
+
+      // Événements de la mesure : markers avant les notes à même position
+      const evs = [];
+      for (const n of notes.filter(n => n.div >= mS && n.div < mE)) evs.push({ k:'n', div: n.div, d: n });
+      for (const mk of marks.filter(mk => mk.div >= mS && mk.div < mE))  evs.push({ k:'m', div: mk.div, text: mk.text });
+      evs.sort((a, b) => a.div !== b.div ? a.div - b.div : a.k === 'm' ? -1 : 1);
+
+      let pos = mS;
+      for (const ev of evs) {
+        if (ev.k === 'm') {
+          if (ev.div > pos) { x += fillRests(ev.div - pos); pos = ev.div; }
+          x += `<direction placement="above"><direction-type><rehearsal>${enc(ev.text)}</rehearsal></direction-type></direction>`;
+          continue;
+        }
+        const nd = ev.d;
+        if (nd.div < pos) continue;                            // note en chevauchement : ignorée
+        if (nd.div > pos) { x += fillRests(nd.div - pos); }
+        const cap  = Math.min(nd.dur, mE - nd.div);
+        const [sd, st] = snapDur(cap);
+        const s = nd.midi % 12, oct = Math.floor(nd.midi / 12) - 1;
+        x += `<note><pitch><step>${STEP[s]}</step>`;
+        if (ALTER[s]) x += `<alter>${ALTER[s]}</alter>`;
+        x += `<octave>${oct}</octave></pitch><duration>${sd}</duration><type>${st}</type></note>`;
+        pos = nd.div + sd;
+      }
+      if (pos < mE) x += fillRests(mE - pos);
+      x += `</measure>\n`;
     }
-    const local = changes.filter(c => c.div >= mS && c.div < mS + DPBar);
-    let pos = 0;
-    for (const c of local) {
-      x += rests(c.div - mS - pos);
-      x += `      <direction placement="above"><direction-type><rehearsal>${encXml(c.text)}</rehearsal></direction-type></direction>\n`;
-      pos = c.div - mS;
-    }
-    x += rests(DPBar - pos);
-    x += `    </measure>\n`;
+    x += `</part>\n`;
   }
-
-  x += `  </part>\n</score-partwise>\n`;
+  x += `</score-partwise>\n`;
   return x;
 }
 
