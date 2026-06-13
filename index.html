@@ -2812,17 +2812,37 @@ async function owDoExportMidi() {
     }
     // Marker bank1 au début pour un redémarrage propre
     trackEvents.push({ type: 'marker', text: 'bank1', offsetSec: 0 });
-    // Insérer marker + Program Change avant la 1re note de chaque bank (sauf la 1re)
+    // Insérer marker avant la 1re note de chaque bank (sauf la 1re)
     for (let b = 1; b < bankCount; b++) {
       const firstNote = objs[b * k];
       if (firstNote) {
         const t = Math.max(0, firstNote.offsetSec - 0.01);
         trackEvents.push({ type: 'marker', text: `bank${b + 1}`, offsetSec: t });
-        trackEvents.push({ type: 'pc', program: b, offsetSec: t });
       }
     }
     midiTracks.push({ name: `Interprète ${i + 1}`, events: trackEvents });
   }
+
+  // Piste "Banks" : notes courtes aux changements de bank (visibilité MuseScore)
+  const _bankPitches = [60, 62, 64, 65, 67, 69, 71, 72]; // C4 D4 E4 F4 G4 A4 B4 C5
+  const _bankMarkerMap = new Map();
+  for (const track of midiTracks) {
+    for (const ev of track.events) {
+      if (ev.type === 'marker') {
+        const cur = _bankMarkerMap.get(ev.text);
+        if (cur === undefined || ev.offsetSec < cur) _bankMarkerMap.set(ev.text, ev.offsetSec);
+      }
+    }
+  }
+  const _banksEvents = [];
+  for (const [text, offsetSec] of [..._bankMarkerMap.entries()].sort((a, b) => a[1] - b[1])) {
+    const mb = text.match(/^bank(\d+)$/i);
+    if (!mb) continue;
+    const pitch = _bankPitches[(parseInt(mb[1]) - 1) % _bankPitches.length];
+    _banksEvents.push({ type: 'marker', text, offsetSec });
+    _banksEvents.push({ offsetSec, durationSec: 0.25, note: pitch, velocity: 80 });
+  }
+  if (_banksEvents.length) midiTracks.push({ name: 'Banks', events: _banksEvents });
 
   // Sauvegarder le fichier MIDI
   const midiAb = owBuildMidiFile(midiTracks);
