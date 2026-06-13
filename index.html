@@ -2847,10 +2847,8 @@ async function owDoExportMidi() {
   await window.api.midiExportSaveFile(folderPath, partName + '_midi.mid', new Uint8Array(midiAb));
 
   // Exporter le MusicXML : notes + repères de bank (lisibles dans MuseScore)
-  const _interpMarkers = midiTracks.slice(0, n).map(t =>
-    t.events.filter(e => e.type === 'marker').map(e => ({ text: e.text, offsetSec: e.offsetSec }))
-  );
-  const _xmlStr = owBuildMusicXml(interpGroups, _interpMarkers, 500000);
+  // On passe k (taille de bank) pour inférer les frontières par indice, pas par temps
+  const _xmlStr = owBuildMusicXml(interpGroups, k, 500000);
   if (_xmlStr) await window.api.midiExportSaveFile(folderPath, partName + '_banks.xml', new TextEncoder().encode(_xmlStr));
 
   const numBanks = Math.ceil(filesPerInterp / k);
@@ -2926,7 +2924,7 @@ function owBuildMidiFile(tracks) {
   return new Uint8Array(chunks.flat()).buffer;
 }
 
-function owBuildMusicXml(interpGroups, interpMarkers, tempo) {
+function owBuildMusicXml(interpGroups, bankSize, tempo) {
   const DPB    = 4;
   const DPBar  = 4 * DPB;
   const BPM    = Math.round(60e6 / tempo);
@@ -2964,12 +2962,31 @@ function owBuildMusicXml(interpGroups, interpMarkers, tempo) {
   x += `</part-list>\n`;
 
   for (let i = 0; i < nI; i++) {
-    const notes = interpGroups[i]
-      .map(o => ({ div: secToD(o.offsetSec), dur: Math.max(1, secToD(o.duree || 0.5)), midi: o.note }))
-      .sort((a, b) => a.div - b.div);
-    const marks = (interpMarkers[i] || []).map(m => ({ div: secToD(m.offsetSec), text: m.text }));
+    // Construire les événements : chaque note conserve son indice d'origine (= banque)
+    // Les repères de banque sont insérés ENTRE la dernière note de bank N et la première de bank N+1,
+    // en se basant sur les indices (pas sur le temps) pour éviter les ambiguïtés d'arrondi.
+    const src = interpGroups[i];
+    const evs = [];
+    for (let j = 0; j < src.length; j++) {
+      const o = src[j];
+      const bankIdx = Math.floor(j / bankSize);
+      if (j > 0 && bankIdx > Math.floor((j - 1) / bankSize)) {
+        // Frontière de banque : repère inséré avant la note d'index j,
+        // placé à la même position que cette note (tri séquentiel garantit l'ordre)
+        evs.push({ k: 'm', seqIdx: j, div: secToD(o.offsetSec), text: `bank${bankIdx + 1}` });
+      }
+      evs.push({ k: 'n', seqIdx: j, div: secToD(o.offsetSec),
+                 dur: Math.max(1, secToD(o.duree || 0.5)), midi: o.note });
+    }
+    // Repère bank1 au début
+    evs.unshift({ k: 'm', seqIdx: -1, div: 0, text: 'bank1' });
+
+    // Trier par (div, seqIdx) : les repères ont seqIdx = index de la 1re note de la banque,
+    // donc ils apparaissent strictement avant cette note après le tri.
+    evs.sort((a, b) => a.div !== b.div ? a.div - b.div : a.seqIdx - b.seqIdx);
 
     x += `<part id="P${i+1}">\n`;
+    let eIdx = 0;
     for (let m = 0; m < nM; m++) {
       const mS = m * DPBar, mE = mS + DPBar;
       x += `<measure number="${m+1}">`;
@@ -2977,26 +2994,23 @@ function owBuildMusicXml(interpGroups, interpMarkers, tempo) {
         x += `<attributes><divisions>${DPB}</divisions><key><fifths>0</fifths></key><time><beats>4</beats><beat-type>4</beat-type></time><clef><sign>G</sign><line>2</line></clef></attributes>`
            + `<direction placement="above"><direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>${BPM}</per-minute></metronome></direction-type><sound tempo="${BPM}"/></direction>`;
 
-      // Événements de la mesure : markers avant les notes à même position
-      const evs = [];
-      for (const n of notes.filter(n => n.div >= mS && n.div < mE)) evs.push({ k:'n', div: n.div, d: n });
-      for (const mk of marks.filter(mk => mk.div >= mS && mk.div < mE))  evs.push({ k:'m', div: mk.div, text: mk.text });
-      evs.sort((a, b) => a.div !== b.div ? a.div - b.div : a.k === 'm' ? -1 : 1);
-
       let pos = mS;
-      for (const ev of evs) {
+      // Avancer l'index d'événements jusqu'à ceux de cette mesure
+      while (eIdx < evs.length && evs[eIdx].div < mS) eIdx++;
+      let ei = eIdx;
+      while (ei < evs.length && evs[ei].div < mE) {
+        const ev = evs[ei++];
         if (ev.k === 'm') {
           if (ev.div > pos) { x += fillRests(ev.div - pos); pos = ev.div; }
           x += `<direction placement="above"><direction-type><rehearsal>${enc(ev.text)}</rehearsal></direction-type></direction>`;
           continue;
         }
-        const nd = ev.d;
-        const startDiv = Math.max(nd.div, pos);
+        const startDiv = Math.max(ev.div, pos);
         if (startDiv >= mE) continue;
         if (startDiv > pos) x += fillRests(startDiv - pos);
-        const cap  = Math.min(nd.dur, mE - startDiv);
+        const cap = Math.min(ev.dur, mE - startDiv);
         const [sd, st] = snapDur(cap);
-        const s = nd.midi % 12, oct = Math.floor(nd.midi / 12) - 1;
+        const s = ev.midi % 12, oct = Math.floor(ev.midi / 12) - 1;
         x += `<note><pitch><step>${STEP[s]}</step>`;
         if (ALTER[s]) x += `<alter>${ALTER[s]}</alter>`;
         x += `<octave>${oct}</octave></pitch><duration>${sd}</duration><type>${st}</type></note>`;
