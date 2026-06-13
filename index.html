@@ -2986,7 +2986,9 @@ function owBuildMusicXml(interpGroups, bankSize, tempo) {
     evs.sort((a, b) => a.div !== b.div ? a.div - b.div : a.seqIdx - b.seqIdx);
 
     x += `<part id="P${i+1}">\n`;
-    let eIdx = 0;
+    // Curseur global + pos global : si une note déborde mE, on sort de la mesure
+    // avec break (sans avancer ei) et elle est placée dans la mesure suivante.
+    let ei = 0, pos = 0;
     for (let m = 0; m < nM; m++) {
       const mS = m * DPBar, mE = mS + DPBar;
       x += `<measure number="${m+1}">`;
@@ -2994,29 +2996,26 @@ function owBuildMusicXml(interpGroups, bankSize, tempo) {
         x += `<attributes><divisions>${DPB}</divisions><key><fifths>0</fifths></key><time><beats>4</beats><beat-type>4</beat-type></time><clef><sign>G</sign><line>2</line></clef></attributes>`
            + `<direction placement="above"><direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>${BPM}</per-minute></metronome></direction-type><sound tempo="${BPM}"/></direction>`;
 
-      let pos = mS;
-      // Avancer l'index d'événements jusqu'à ceux de cette mesure
-      while (eIdx < evs.length && evs[eIdx].div < mS) eIdx++;
-      let ei = eIdx;
-      while (ei < evs.length && evs[ei].div < mE) {
-        const ev = evs[ei++];
+      while (ei < evs.length) {
+        const ev = evs[ei];
+        const evDiv = Math.max(ev.div, pos);  // position effective (tient compte de pos)
+        if (evDiv >= mE) break;               // reporter à la mesure suivante
+        ei++;
         if (ev.k === 'm') {
-          if (ev.div > pos) { x += fillRests(ev.div - pos); pos = ev.div; }
+          if (evDiv > pos) { x += fillRests(evDiv - pos); pos = evDiv; }
           x += `<direction placement="above"><direction-type><rehearsal>${enc(ev.text)}</rehearsal></direction-type></direction>`;
           continue;
         }
-        const startDiv = Math.max(ev.div, pos);
-        if (startDiv >= mE) continue;
-        if (startDiv > pos) x += fillRests(startDiv - pos);
-        const cap = Math.min(ev.dur, mE - startDiv);
+        if (evDiv > pos) x += fillRests(evDiv - pos);
+        const cap = Math.min(ev.dur, mE - evDiv);
         const [sd, st] = snapDur(cap);
         const s = ev.midi % 12, oct = Math.floor(ev.midi / 12) - 1;
         x += `<note><pitch><step>${STEP[s]}</step>`;
         if (ALTER[s]) x += `<alter>${ALTER[s]}</alter>`;
         x += `<octave>${oct}</octave></pitch><duration>${sd}</duration><type>${st}</type></note>`;
-        pos = startDiv + sd;
+        pos = evDiv + sd;
       }
-      if (pos < mE) x += fillRests(mE - pos);
+      if (pos < mE) { x += fillRests(mE - pos); pos = mE; }
       x += `</measure>\n`;
     }
     x += `</part>\n`;
