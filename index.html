@@ -2945,6 +2945,11 @@ function owBuildMusicXml(interpGroups, bankSize, tempo, oneShot = true) {
   const sSec   = tempo / 1e6 / DPB;
   const secToD = s => Math.round(s / sSec);
   const enc    = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  // Quantification à la double-croche (12 divs ≈ 125ms @120BPM) pour que tous
+  // les onsets et durées soient des multiples de 12 → les silences entre notes
+  // sont toujours exprimables en valeurs standard, les mesures bouclent à 0.
+  const Q     = DPB / 4;                                 // 12 divisions = double-croche
+  const snapQ = v => Math.round(v / Q) * Q;
 
   const STEP  = ['C','C','D','D','E','F','F','G','G','A','A','B'];
   const ALTER = [ 0,  1,  0,  1,  0,  0,  1,  0,  1,  0,  1,  0];
@@ -2983,7 +2988,7 @@ function owBuildMusicXml(interpGroups, bankSize, tempo, oneShot = true) {
 
   let lastDiv = 0;
   for (const objs of interpGroups)
-    for (const o of objs) lastDiv = Math.max(lastDiv, secToD(o.offsetSec + (o.duree || 0.5)));
+    for (const o of objs) lastDiv = Math.max(lastDiv, snapQ(secToD(o.offsetSec)) + Math.max(Q, snapQ(secToD(o.duree || 0.5))));
   const nM = Math.max(1, Math.ceil((lastDiv + DPBar) / DPBar));
   const nI = interpGroups.length;
 
@@ -3010,7 +3015,7 @@ function owBuildMusicXml(interpGroups, bankSize, tempo, oneShot = true) {
     const markers = [{ div: 0, text: 'bank1' }];
     for (let j = 1; j < src.length; j++)
       if (Math.floor(j / bankSize) > Math.floor((j - 1) / bankSize))
-        markers.push({ div: secToD(src[j].offsetSec), text: `bank${Math.floor(j / bankSize) + 1}` });
+        markers.push({ div: snapQ(secToD(src[j].offsetSec)), text: `bank${Math.floor(j / bankSize) + 1}` });
     markers.sort((a, b) => a.div - b.div);
 
     if (oneShot) {
@@ -3020,9 +3025,9 @@ function owBuildMusicXml(interpGroups, bankSize, tempo, oneShot = true) {
         const o = src[j];
         const bankIdx = Math.floor(j / bankSize);
         if (j > 0 && bankIdx > Math.floor((j - 1) / bankSize))
-          evs.push({ k: 'm', seqIdx: j, div: secToD(o.offsetSec), text: `bank${bankIdx + 1}` });
-        evs.push({ k: 'n', seqIdx: j, div: secToD(o.offsetSec),
-                   dur: Math.max(1, secToD(o.duree || 0.5)), midi: o.note });
+          evs.push({ k: 'm', seqIdx: j, div: snapQ(secToD(o.offsetSec)), text: `bank${bankIdx + 1}` });
+        evs.push({ k: 'n', seqIdx: j, div: snapQ(secToD(o.offsetSec)),
+                   dur: Math.max(Q, snapQ(secToD(o.duree || 0.5))), midi: o.note });
       }
       evs.unshift({ k: 'm', seqIdx: -1, div: 0, text: 'bank1' });
       evs.sort((a, b) => a.div !== b.div ? a.div - b.div : a.seqIdx - b.seqIdx);
@@ -3063,8 +3068,8 @@ function owBuildMusicXml(interpGroups, bankSize, tempo, oneShot = true) {
       const voiceNotes = [];
       for (let j = 0; j < src.length; j++) {
         const o = src[j];
-        const div = secToD(o.offsetSec);
-        const dur = Math.max(1, secToD(o.duree || 0.5));
+        const div = snapQ(secToD(o.offsetSec));
+        const dur = Math.max(Q, snapQ(secToD(o.duree || 0.5)));
         let v = voiceNotes.findIndex(vn => {
           if (!vn.length) return true;
           const last = vn[vn.length - 1];
