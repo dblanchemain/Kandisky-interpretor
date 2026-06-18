@@ -3027,7 +3027,8 @@ function owBuildMusicXml(interpGroups, bankSize, tempo, oneShot = true) {
         if (j > 0 && bankIdx > Math.floor((j - 1) / bankSize))
           evs.push({ k: 'm', seqIdx: j, div: snapQ(secToD(o.offsetSec)), text: `bank${bankIdx + 1}` });
         evs.push({ k: 'n', seqIdx: j, div: snapQ(secToD(o.offsetSec)),
-                   dur: Math.max(Q, snapQ(secToD(o.duree || 0.5))), midi: o.note });
+                   dur: DPB,  // noire fixe — 1shot=true indique l'attaque, pas la durée réelle
+                   midi: o.note });
       }
       evs.unshift({ k: 'm', seqIdx: -1, div: 0, text: 'bank1' });
       evs.sort((a, b) => a.div !== b.div ? a.div - b.div : a.seqIdx - b.seqIdx);
