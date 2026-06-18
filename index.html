@@ -3044,20 +3044,21 @@ function owBuildMusicXml(interpGroups, bankSize, tempo, oneShot = true) {
         for (const co of carryover) {
           const avail = mE - pos;
           if (avail <= 0) { nextCarry.push(co); continue; }
-          const [n, t, dot] = snapDur(Math.min(co.rem, avail));
+          const actual = Math.min(co.rem, avail);
+          const [n, t, dot] = snapDur(actual);
           const s = co.midi % 12, oct = Math.floor(co.midi / 12) - 1;
           x += `<note><pitch><step>${STEP[s]}</step>`;
           if (ALTER[s]) x += `<alter>${ALTER[s]}</alter>`;
           x += `<octave>${oct}</octave></pitch><duration>${n}</duration>`;
           x += `<tie type="stop"/>`;
-          if (co.rem > n) x += `<tie type="start"/>`;
+          if (co.rem > actual) x += `<tie type="start"/>`;
           x += `<type>${t}</type>`;
           if (dot) x += `<dot/>`;
           let not = `<tied type="stop"/>`;
-          if (co.rem > n) not += `<tied type="start"/>`;
+          if (co.rem > actual) not += `<tied type="start"/>`;
           x += `<notations>${not}</notations></note>`;
-          pos += n;
-          co.rem -= n;
+          pos = Math.min(pos + n, mE);
+          co.rem -= actual;  // temps réel consommé, pas la valeur snappée
           if (co.rem > 0) nextCarry.push(co);
         }
         carryover = nextCarry;
@@ -3075,30 +3076,32 @@ function owBuildMusicXml(interpGroups, bankSize, tempo, oneShot = true) {
           continue;
         }
         if (evDiv > pos) x += fillRests(evDiv - pos);
-        const cap = Math.min(ev.dur, mE - evDiv);
+        const space = mE - evDiv;  // place disponible dans cette mesure
         const s = ev.midi % 12, oct = Math.floor(ev.midi / 12) - 1;
         x += `<note><pitch><step>${STEP[s]}</step>`;
         if (ALTER[s]) x += `<alter>${ALTER[s]}</alter>`;
         if (oneShot) {
-          const [sd, st, dot] = snapDurBasic(cap);
+          const [sd, st, dot] = snapDurBasic(Math.min(ev.dur, space));
           x += `<octave>${oct}</octave></pitch><duration>${sd}</duration><type>${st}</type>`;
           if (dot) x += `<dot/>`;
           x += `</note>`;
-          pos = evDiv + sd;
+          pos = Math.min(evDiv + sd, mE);  // jamais dépasser la fin de mesure
         } else {
-          const [n, t, dot] = snapDur(cap);
-          const hasMore = ev.dur > n;
+          const actual = Math.min(ev.dur, space);
+          const [n, t, dot] = snapDur(actual);
+          const hasMore = ev.dur > space;  // la note réelle dépasse la mesure
           x += `<octave>${oct}</octave></pitch><duration>${n}</duration>`;
           if (hasMore) x += `<tie type="start"/>`;
           x += `<type>${t}</type>`;
           if (dot) x += `<dot/>`;
           if (hasMore) x += `<notations><tied type="start"/></notations>`;
           x += `</note>`;
-          pos = evDiv + n;
-          if (hasMore) carryover.push({ rem: ev.dur - n, midi: ev.midi });
+          pos = Math.min(evDiv + n, mE);
+          if (hasMore) carryover.push({ rem: ev.dur - space, midi: ev.midi });  // temps réel restant
         }
       }
-      if (pos < mE) { x += fillRests(mE - pos); pos = mE; }
+      if (pos < mE) x += fillRests(mE - pos);
+      pos = mE;  // toujours réinitialiser — évite la cascade en cas de débordement d'arrondi
       x += `</measure>\n`;
     }
     x += `</part>\n`;
