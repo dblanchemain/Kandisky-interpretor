@@ -3014,8 +3014,18 @@ function owBuildMusicXml(interpGroups, bankSize, tempo, oneShot = true) {
         // placé à la même position que cette note (tri séquentiel garantit l'ordre)
         evs.push({ k: 'm', seqIdx: j, div: secToD(o.offsetSec), text: `bank${bankIdx + 1}` });
       }
+      const rawDur = Math.max(1, secToD(o.duree || 0.5));
+      // Pour 1shot=false : capituler à l'écart vers la prochaine note pour éviter
+      // les chevauchements dans la représentation monophonique du MusicXML.
+      // Plusieurs notes simultanées en carryover bloqueraient la boucle d'événements
+      // et empêcheraient les repères de bank ultérieurs d'être émis.
+      let dur = rawDur;
+      if (!oneShot && j + 1 < src.length) {
+        const gap = secToD(src[j + 1].offsetSec) - secToD(o.offsetSec);
+        if (gap > 0 && rawDur > gap) dur = gap;
+      }
       evs.push({ k: 'n', seqIdx: j, div: secToD(o.offsetSec),
-                 dur: Math.max(1, secToD(o.duree || 0.5)), midi: o.note });
+                 dur: Math.max(1, dur), midi: o.note });
     }
     // Repère bank1 au début
     evs.unshift({ k: 'm', seqIdx: -1, div: 0, text: 'bank1' });
