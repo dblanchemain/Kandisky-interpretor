@@ -2939,7 +2939,7 @@ function owBuildMidiFile(tracks) {
 }
 
 function owBuildMusicXml(interpGroups, bankSize, tempo, oneShot = true) {
-  const DPB    = 48;  // 48 divisions/noire ≈ 10ms @120BPM, bien plus proche de la résolution MIDI
+  const DPB    = 48;
   const DPBar  = 4 * DPB;
   const BPM    = Math.round(60e6 / tempo);
   const sSec   = tempo / 1e6 / DPB;
@@ -2949,43 +2949,37 @@ function owBuildMusicXml(interpGroups, bankSize, tempo, oneShot = true) {
   const STEP  = ['C','C','D','D','E','F','F','G','G','A','A','B'];
   const ALTER = [ 0,  1,  0,  1,  0,  0,  1,  0,  1,  0,  1,  0];
 
-  // Avec valeurs pointées — pour carry-over (1shot=false) et fillRests
   function snapDur(d) {
     for (const [n,t,dot] of [
-      [DPBar,      'whole',   false],
-      [DPBar*3/4,  'half',    true ],
-      [DPBar/2,    'half',    false],
-      [DPB*3/2,    'quarter', true ],
-      [DPB,        'quarter', false],
-      [DPB*3/4,    'eighth',  true ],
-      [DPB/2,      'eighth',  false],
-      [DPB/4,      '16th',    false],
+      [DPBar,     'whole',   false],[DPBar*3/4, 'half',    true ],[DPBar/2,   'half',    false],
+      [DPB*3/2,   'quarter', true ],[DPB,       'quarter', false],[DPB*3/4,   'eighth',  true ],
+      [DPB/2,     'eighth',  false],[DPB/4,     '16th',    false],
     ])
       if (d >= n && n > 0) return [n, t, dot];
     return [DPB/4, '16th', false];
   }
 
-  // Sans valeurs pointées — pour 1shot=true (comportement original, évite de décaler les repères de bank)
   function snapDurBasic(d) {
     for (const [n,t] of [[DPBar,'whole'],[DPBar/2,'half'],[DPB,'quarter'],[DPB/2,'eighth'],[DPB/4,'16th']])
       if (d >= n && n > 0) return [n, t, false];
     return [DPB/4, '16th', false];
   }
 
-  function fillRests(n) {
+  // voice : numéro de voix MusicXML (1-based) ou 0 = pas de balise <voice>
+  function fillRests(n, voice = 0) {
     let s = '', r = n;
+    const vEl = voice ? `<voice>${voice}</voice>` : '';
     for (const [d,t,dot] of [
       [DPBar,'whole',false],[DPBar*3/4,'half',true],[DPBar/2,'half',false],
       [DPB*3/2,'quarter',true],[DPB,'quarter',false],
       [DPB*3/4,'eighth',true],[DPB/2,'eighth',false],[DPB/4,'16th',false]
     ])
       while (r >= d && d > 0) {
-        s += `<note><rest/><duration>${d}</duration><type>${t}</type>${dot?'<dot/>':''}</note>`;
+        s += `<note><rest/><duration>${d}</duration>${vEl}<type>${t}</type>${dot?'<dot/>':''}</note>`;
         r -= d;
       }
     return s;
   }
-
 
   let lastDiv = 0;
   for (const objs of interpGroups)
@@ -3000,120 +2994,164 @@ function owBuildMusicXml(interpGroups, bankSize, tempo, oneShot = true) {
     x += `<score-part id="P${i+1}"><part-name>Interprète ${i+1}</part-name></score-part>\n`;
   x += `</part-list>\n`;
 
+  const ATTRS = m =>
+    `<attributes><divisions>${DPB}</divisions><key><fifths>0</fifths></key>`
+    + `<time><beats>4</beats><beat-type>4</beat-type></time>`
+    + `<clef><sign>G</sign><line>2</line></clef></attributes>`
+    + `<direction placement="above"><direction-type><metronome>`
+    + `<beat-unit>quarter</beat-unit><per-minute>${BPM}</per-minute>`
+    + `</metronome></direction-type><sound tempo="${BPM}"/></direction>`;
+
   for (let i = 0; i < nI; i++) {
-    // Construire les événements : chaque note conserve son indice d'origine (= banque)
-    // Les repères de banque sont insérés ENTRE la dernière note de bank N et la première de bank N+1,
-    // en se basant sur les indices (pas sur le temps) pour éviter les ambiguïtés d'arrondi.
     const src = interpGroups[i];
-    const evs = [];
-    for (let j = 0; j < src.length; j++) {
-      const o = src[j];
-      const bankIdx = Math.floor(j / bankSize);
-      if (j > 0 && bankIdx > Math.floor((j - 1) / bankSize)) {
-        // Frontière de banque : repère inséré avant la note d'index j,
-        // placé à la même position que cette note (tri séquentiel garantit l'ordre)
-        evs.push({ k: 'm', seqIdx: j, div: secToD(o.offsetSec), text: `bank${bankIdx + 1}` });
-      }
-      const rawDur = Math.max(1, secToD(o.duree || 0.5));
-      // Pour 1shot=false : capituler à l'écart vers la prochaine note pour éviter
-      // les chevauchements dans la représentation monophonique du MusicXML.
-      // Plusieurs notes simultanées en carryover bloqueraient la boucle d'événements
-      // et empêcheraient les repères de bank ultérieurs d'être émis.
-      let dur = rawDur;
-      if (!oneShot && j + 1 < src.length) {
-        const gap = secToD(src[j + 1].offsetSec) - secToD(o.offsetSec);
-        if (gap > 0 && rawDur > gap) dur = gap;
-      }
-      evs.push({ k: 'n', seqIdx: j, div: secToD(o.offsetSec),
-                 dur: Math.max(1, dur), midi: o.note });
-    }
-    // Repère bank1 au début
-    evs.unshift({ k: 'm', seqIdx: -1, div: 0, text: 'bank1' });
-
-    // Trier par (div, seqIdx) : les repères ont seqIdx = index de la 1re note de la banque,
-    // donc ils apparaissent strictement avant cette note après le tri.
-    evs.sort((a, b) => a.div !== b.div ? a.div - b.div : a.seqIdx - b.seqIdx);
-
     x += `<part id="P${i+1}">\n`;
 
-    // carry-over : { rem, midi } — durée restante d'une note liée qui franchit une mesure (1shot=false)
-    let carryover = [];
-    let ei = 0, pos = 0;
+    // ── Repères de bank (partagés entre les deux modes) ──
+    const markers = [{ div: 0, text: 'bank1' }];
+    for (let j = 1; j < src.length; j++)
+      if (Math.floor(j / bankSize) > Math.floor((j - 1) / bankSize))
+        markers.push({ div: secToD(src[j].offsetSec), text: `bank${Math.floor(j / bankSize) + 1}` });
+    markers.sort((a, b) => a.div - b.div);
 
-    for (let m = 0; m < nM; m++) {
-      const mS = m * DPBar, mE = mS + DPBar;
-      x += `<measure number="${m+1}">`;
-      if (m === 0)
-        x += `<attributes><divisions>${DPB}</divisions><key><fifths>0</fifths></key><time><beats>4</beats><beat-type>4</beat-type></time><clef><sign>G</sign><line>2</line></clef></attributes>`
-           + `<direction placement="above"><direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>${BPM}</per-minute></metronome></direction-type><sound tempo="${BPM}"/></direction>`
-           + `<direction placement="above"><direction-type><words>${oneShot ? '1-shot' : 'note-off'}</words></direction-type></direction>`;
+    if (oneShot) {
+      // ══ 1shot=true : voix unique, durées courtes (snapDurBasic), pas de carry-over ══
+      const evs = [];
+      for (let j = 0; j < src.length; j++) {
+        const o = src[j];
+        const bankIdx = Math.floor(j / bankSize);
+        if (j > 0 && bankIdx > Math.floor((j - 1) / bankSize))
+          evs.push({ k: 'm', seqIdx: j, div: secToD(o.offsetSec), text: `bank${bankIdx + 1}` });
+        evs.push({ k: 'n', seqIdx: j, div: secToD(o.offsetSec),
+                   dur: Math.max(1, secToD(o.duree || 0.5)), midi: o.note });
+      }
+      evs.unshift({ k: 'm', seqIdx: -1, div: 0, text: 'bank1' });
+      evs.sort((a, b) => a.div !== b.div ? a.div - b.div : a.seqIdx - b.seqIdx);
 
-      // ── Continuations liées depuis la mesure précédente (1shot=false uniquement) ──
-      if (!oneShot) {
-        const nextCarry = [];
-        for (const co of carryover) {
-          const avail = mE - pos;
-          if (avail <= 0) { nextCarry.push(co); continue; }
-          const actual = Math.min(co.rem, avail);
-          const [n, t, dot] = snapDur(actual);
-          const s = co.midi % 12, oct = Math.floor(co.midi / 12) - 1;
+      let ei = 0, pos = 0;
+      for (let m = 0; m < nM; m++) {
+        const mS = m * DPBar, mE = mS + DPBar;
+        x += `<measure number="${m+1}">`;
+        if (m === 0)
+          x += ATTRS(m) + `<direction placement="above"><direction-type><words>1-shot</words></direction-type></direction>`;
+        while (ei < evs.length) {
+          const ev = evs[ei];
+          const evDiv = Math.max(ev.div, pos);
+          if (evDiv >= mE) break;
+          ei++;
+          if (ev.k === 'm') {
+            if (evDiv > pos) { x += fillRests(evDiv - pos); pos = evDiv; }
+            x += `<direction placement="above"><direction-type><rehearsal>${enc(ev.text)}</rehearsal></direction-type></direction>`;
+            continue;
+          }
+          if (evDiv > pos) x += fillRests(evDiv - pos);
+          const space = mE - evDiv;
+          const s = ev.midi % 12, oct = Math.floor(ev.midi / 12) - 1;
+          const [sd, st] = snapDurBasic(Math.min(ev.dur, space));
           x += `<note><pitch><step>${STEP[s]}</step>`;
           if (ALTER[s]) x += `<alter>${ALTER[s]}</alter>`;
-          x += `<octave>${oct}</octave></pitch><duration>${n}</duration>`;
-          x += `<tie type="stop"/>`;
-          if (co.rem > actual) x += `<tie type="start"/>`;
-          x += `<type>${t}</type>`;
-          if (dot) x += `<dot/>`;
-          let not = `<tied type="stop"/>`;
-          if (co.rem > actual) not += `<tied type="start"/>`;
-          x += `<notations>${not}</notations></note>`;
-          pos = Math.min(pos + n, mE);
-          co.rem -= actual;  // temps réel consommé, pas la valeur snappée
-          if (co.rem > 0) nextCarry.push(co);
+          x += `<octave>${oct}</octave></pitch><duration>${sd}</duration><type>${st}</type></note>`;
+          pos = Math.min(evDiv + sd, mE);
         }
-        carryover = nextCarry;
+        if (pos < mE) x += fillRests(mE - pos);
+        pos = mE;
+        x += `</measure>\n`;
       }
 
-      // ── Événements de la mesure ──
-      while (ei < evs.length) {
-        const ev = evs[ei];
-        const evDiv = Math.max(ev.div, pos);
-        if (evDiv >= mE) break;
-        ei++;
-        if (ev.k === 'm') {
-          if (evDiv > pos) { x += fillRests(evDiv - pos); pos = evDiv; }
-          x += `<direction placement="above"><direction-type><rehearsal>${enc(ev.text)}</rehearsal></direction-type></direction>`;
-          continue;
-        }
-        if (evDiv > pos) x += fillRests(evDiv - pos);
-        const space = mE - evDiv;  // place disponible dans cette mesure
-        const s = ev.midi % 12, oct = Math.floor(ev.midi / 12) - 1;
-        x += `<note><pitch><step>${STEP[s]}</step>`;
-        if (ALTER[s]) x += `<alter>${ALTER[s]}</alter>`;
-        if (oneShot) {
-          const [sd, st, dot] = snapDurBasic(Math.min(ev.dur, space));
-          x += `<octave>${oct}</octave></pitch><duration>${sd}</duration><type>${st}</type>`;
-          if (dot) x += `<dot/>`;
-          x += `</note>`;
-          pos = Math.min(evDiv + sd, mE);  // jamais dépasser la fin de mesure
-        } else {
-          const actual = Math.min(ev.dur, space);
-          const [n, t, dot] = snapDur(actual);
-          const hasMore = ev.dur > space;  // la note réelle dépasse la mesure
-          x += `<octave>${oct}</octave></pitch><duration>${n}</duration>`;
-          if (hasMore) x += `<tie type="start"/>`;
-          x += `<type>${t}</type>`;
-          if (dot) x += `<dot/>`;
-          if (hasMore) x += `<notations><tied type="start"/></notations>`;
-          x += `</note>`;
-          pos = Math.min(evDiv + n, mE);
-          if (hasMore) carryover.push({ rem: ev.dur - space, midi: ev.midi });  // temps réel restant
-        }
+    } else {
+      // ══ 1shot=false : polyphonie — chaque note chevauchante dans sa propre voix ══
+      // Affectation first-fit : voix libre = last.div + last.dur <= onset courant
+      const voiceNotes = [];
+      for (let j = 0; j < src.length; j++) {
+        const o = src[j];
+        const div = secToD(o.offsetSec);
+        const dur = Math.max(1, secToD(o.duree || 0.5));
+        let v = voiceNotes.findIndex(vn => {
+          if (!vn.length) return true;
+          const last = vn[vn.length - 1];
+          return last.div + last.dur <= div;
+        });
+        if (v < 0) { v = voiceNotes.length; voiceNotes.push([]); }
+        voiceNotes[v].push({ div, dur, midi: o.note });
       }
-      if (pos < mE) x += fillRests(mE - pos);
-      pos = mE;  // toujours réinitialiser — évite la cascade en cas de débordement d'arrondi
-      x += `</measure>\n`;
+      const nVoices = Math.max(1, voiceNotes.length);
+      // État par voix (persistant entre les mesures)
+      const vei   = new Array(nVoices).fill(0);   // index de note
+      const vCarry = new Array(nVoices).fill(null); // carry-over {rem, midi}
+      let mi = 0; // index repère de bank en cours
+
+      for (let m = 0; m < nM; m++) {
+        const mS = m * DPBar, mE = mS + DPBar;
+        x += `<measure number="${m+1}">`;
+        if (m === 0)
+          x += ATTRS(m) + `<direction placement="above"><direction-type><words>note-off</words></direction-type></direction>`;
+
+        for (let v = 0; v < nVoices; v++) {
+          if (v > 0) x += `<backup><duration>${DPBar}</duration></backup>`;
+          let vp = mS; // position courante dans la mesure (valeur absolue de division)
+
+          // Voix 0 : repères de bank au début de leur mesure d'appartenance
+          if (v === 0) {
+            while (mi < markers.length && markers[mi].div < mE) {
+              x += `<direction placement="above"><direction-type><rehearsal>${enc(markers[mi].text)}</rehearsal></direction-type></direction>`;
+              mi++;
+            }
+          }
+
+          // Carry-over de la mesure précédente pour cette voix
+          if (vCarry[v]) {
+            const co = vCarry[v];
+            const avail = mE - vp;
+            const actual = Math.min(co.rem, avail);
+            const [n, t, dot] = snapDur(actual);
+            const hasMore = co.rem > actual;
+            const s = co.midi % 12, oct = Math.floor(co.midi / 12) - 1;
+            x += `<note><pitch><step>${STEP[s]}</step>`;
+            if (ALTER[s]) x += `<alter>${ALTER[s]}</alter>`;
+            x += `<octave>${oct}</octave></pitch><duration>${n}</duration>`;
+            x += `<tie type="stop"/>`;
+            if (hasMore) x += `<tie type="start"/>`;
+            x += `<voice>${v + 1}</voice><type>${t}</type>`;
+            if (dot) x += `<dot/>`;
+            let not = `<tied type="stop"/>`;
+            if (hasMore) not += `<tied type="start"/>`;
+            x += `<notations>${not}</notations></note>`;
+            vp = Math.min(vp + n, mE);
+            co.rem -= actual;
+            if (co.rem <= 0) vCarry[v] = null;
+          }
+
+          // Notes de cette voix dans la mesure courante
+          const vNotes = voiceNotes[v] ?? [];
+          while (vei[v] < vNotes.length) {
+            const ev = vNotes[vei[v]];
+            const evDiv = Math.max(ev.div, vp);
+            if (evDiv >= mE) break;
+            vei[v]++;
+            if (evDiv > vp) x += fillRests(evDiv - vp, v + 1);
+            const space = mE - evDiv;
+            const actual = Math.min(ev.dur, space);
+            const [n, t, dot] = snapDur(actual);
+            const hasMore = ev.dur > space;
+            const s = ev.midi % 12, oct = Math.floor(ev.midi / 12) - 1;
+            x += `<note><pitch><step>${STEP[s]}</step>`;
+            if (ALTER[s]) x += `<alter>${ALTER[s]}</alter>`;
+            x += `<octave>${oct}</octave></pitch><duration>${n}</duration>`;
+            if (hasMore) x += `<tie type="start"/>`;
+            x += `<voice>${v + 1}</voice><type>${t}</type>`;
+            if (dot) x += `<dot/>`;
+            if (hasMore) x += `<notations><tied type="start"/></notations>`;
+            x += `</note>`;
+            vp = Math.min(evDiv + n, mE);
+            if (hasMore) vCarry[v] = { rem: ev.dur - space, midi: ev.midi };
+          }
+
+          // Compléter la voix jusqu'à mE
+          if (vp < mE) x += fillRests(mE - vp, v + 1);
+        }
+        x += `</measure>\n`;
+      }
     }
+
     x += `</part>\n`;
   }
   x += `</score-partwise>\n`;
