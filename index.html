@@ -2950,16 +2950,50 @@ function owBuildMusicXml(interpGroups, bankSize, tempo, oneShot = true) {
   const ALTER = [ 0,  1,  0,  1,  0,  0,  1,  0,  1,  0,  1,  0];
 
   function snapDur(d) {
-    for (const [n,t] of [[DPBar,'whole'],[DPBar/2,'half'],[DPB,'quarter'],[DPB/2,'eighth'],[DPB/4,'16th']])
-      if (d >= n && n > 0) return [n, t];
-    return [DPB/4,'16th'];
+    for (const [n,t,dot] of [
+      [DPBar,      'whole',   false],
+      [DPBar*3/4,  'half',    true ],   // blanche pointée
+      [DPBar/2,    'half',    false],
+      [DPB*3/2,    'quarter', true ],   // noire pointée
+      [DPB,        'quarter', false],
+      [DPB*3/4,    'eighth',  true ],   // croche pointée
+      [DPB/2,      'eighth',  false],
+      [DPB/4,      '16th',    false],
+    ])
+      if (d >= n && n > 0) return [n, t, dot];
+    return [DPB/4, '16th', false];
   }
 
   function fillRests(n) {
     let s = '', r = n;
-    for (const [d,t] of [[DPBar,'whole'],[DPBar/2,'half'],[DPB,'quarter'],[DPB/2,'eighth'],[DPB/4,'16th']])
-      while (r >= d && d > 0) { s += `<note><rest/><duration>${d}</duration><type>${t}</type></note>`; r -= d; }
+    for (const [d,t,dot] of [
+      [DPBar,'whole',false],[DPBar*3/4,'half',true],[DPBar/2,'half',false],
+      [DPB*3/2,'quarter',true],[DPB,'quarter',false],
+      [DPB*3/4,'eighth',true],[DPB/2,'eighth',false],[DPB/4,'16th',false]
+    ])
+      while (r >= d && d > 0) {
+        s += `<note><rest/><duration>${d}</duration><type>${t}</type>${dot?'<dot/>':''}</note>`;
+        r -= d;
+      }
     return s;
+  }
+
+  // Pour 1shot=false : découper chaque note à chaque frontière de mesure et annoter les liaisons
+  function splitAtMeasures(evs) {
+    const out = [];
+    for (const ev of evs) {
+      if (ev.k !== 'n') { out.push({ ...ev, tieStart: false, tieStop: false }); continue; }
+      let rem = ev.dur, d0 = ev.div, first = true;
+      while (rem > 0) {
+        const mEnd   = (Math.floor(d0 / DPBar) + 1) * DPBar;
+        const seg    = Math.min(rem, mEnd - d0);
+        const isLast = rem <= mEnd - d0;
+        out.push({ k: 'n', seqIdx: ev.seqIdx, div: d0, dur: seg, midi: ev.midi,
+                   tieStart: !isLast, tieStop: !first });
+        rem -= seg; d0 += seg; first = false;
+      }
+    }
+    return out.sort((a, b) => a.div !== b.div ? a.div - b.div : a.seqIdx - b.seqIdx);
   }
 
   let lastDiv = 0;
@@ -2999,9 +3033,10 @@ function owBuildMusicXml(interpGroups, bankSize, tempo, oneShot = true) {
     // donc ils apparaissent strictement avant cette note après le tri.
     evs.sort((a, b) => a.div !== b.div ? a.div - b.div : a.seqIdx - b.seqIdx);
 
+    // 1shot=false : pré-découper les notes qui franchissent les frontières de mesure
+    const procEvs = oneShot ? evs : splitAtMeasures(evs);
+
     x += `<part id="P${i+1}">\n`;
-    // Curseur global + pos global : si une note déborde mE, on sort de la mesure
-    // avec break (sans avancer ei) et elle est placée dans la mesure suivante.
     let ei = 0, pos = 0;
     for (let m = 0; m < nM; m++) {
       const mS = m * DPBar, mE = mS + DPBar;
@@ -3011,10 +3046,10 @@ function owBuildMusicXml(interpGroups, bankSize, tempo, oneShot = true) {
            + `<direction placement="above"><direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>${BPM}</per-minute></metronome></direction-type><sound tempo="${BPM}"/></direction>`
            + `<direction placement="above"><direction-type><words>${oneShot ? '1-shot' : 'note-off'}</words></direction-type></direction>`;
 
-      while (ei < evs.length) {
-        const ev = evs[ei];
-        const evDiv = Math.max(ev.div, pos);  // position effective (tient compte de pos)
-        if (evDiv >= mE) break;               // reporter à la mesure suivante
+      while (ei < procEvs.length) {
+        const ev = procEvs[ei];
+        const evDiv = Math.max(ev.div, pos);
+        if (evDiv >= mE) break;
         ei++;
         if (ev.k === 'm') {
           if (evDiv > pos) { x += fillRests(evDiv - pos); pos = evDiv; }
@@ -3022,15 +3057,26 @@ function owBuildMusicXml(interpGroups, bankSize, tempo, oneShot = true) {
           continue;
         }
         if (evDiv > pos) x += fillRests(evDiv - pos);
-        const cap = Math.min(ev.dur, mE - evDiv);
-        const [sd, st] = snapDur(cap);
-        // 1shot=false : durée brute (non snappée) pour coller au note-off MIDI exact
+        // 1shot=true : snap musical ; 1shot=false : durée exacte du segment (pre-découpé)
+        const cap = oneShot ? Math.min(ev.dur, mE - evDiv) : ev.dur;
+        const [sd, st, dot] = snapDur(cap);
         const noteDur = oneShot ? sd : cap;
         const s = ev.midi % 12, oct = Math.floor(ev.midi / 12) - 1;
         x += `<note><pitch><step>${STEP[s]}</step>`;
         if (ALTER[s]) x += `<alter>${ALTER[s]}</alter>`;
-        x += `<octave>${oct}</octave></pitch><duration>${noteDur}</duration><type>${st}</type>`;
-        if (!oneShot) x += `<notations><articulations><staccato placement="above"/></articulations></notations>`;
+        x += `<octave>${oct}</octave></pitch><duration>${noteDur}</duration>`;
+        if (!oneShot && ev.tieStop)  x += `<tie type="stop"/>`;
+        if (!oneShot && ev.tieStart) x += `<tie type="start"/>`;
+        x += `<type>${st}</type>`;
+        if (dot) x += `<dot/>`;
+        // Notations : liaisons + staccato sur la dernière note liée seulement
+        let notations = '';
+        if (!oneShot) {
+          if (ev.tieStop)  notations += `<tied type="stop"/>`;
+          if (ev.tieStart) notations += `<tied type="start"/>`;
+          if (!ev.tieStart) notations += `<articulations><staccato placement="above"/></articulations>`;
+        }
+        if (notations) x += `<notations>${notations}</notations>`;
         x += `</note>`;
         pos = evDiv + noteDur;
       }
