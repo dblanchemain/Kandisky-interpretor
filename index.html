@@ -2949,18 +2949,26 @@ function owBuildMusicXml(interpGroups, bankSize, tempo, oneShot = true) {
   const STEP  = ['C','C','D','D','E','F','F','G','G','A','A','B'];
   const ALTER = [ 0,  1,  0,  1,  0,  0,  1,  0,  1,  0,  1,  0];
 
+  // Avec valeurs pointées — pour expandNotes (1shot=false) et fillRests
   function snapDur(d) {
     for (const [n,t,dot] of [
       [DPBar,      'whole',   false],
-      [DPBar*3/4,  'half',    true ],   // blanche pointée
+      [DPBar*3/4,  'half',    true ],
       [DPBar/2,    'half',    false],
-      [DPB*3/2,    'quarter', true ],   // noire pointée
+      [DPB*3/2,    'quarter', true ],
       [DPB,        'quarter', false],
-      [DPB*3/4,    'eighth',  true ],   // croche pointée
+      [DPB*3/4,    'eighth',  true ],
       [DPB/2,      'eighth',  false],
       [DPB/4,      '16th',    false],
     ])
       if (d >= n && n > 0) return [n, t, dot];
+    return [DPB/4, '16th', false];
+  }
+
+  // Sans valeurs pointées — pour 1shot=true (comportement original, évite de décaler les repères de bank)
+  function snapDurBasic(d) {
+    for (const [n,t] of [[DPBar,'whole'],[DPBar/2,'half'],[DPB,'quarter'],[DPB/2,'eighth'],[DPB/4,'16th']])
+      if (d >= n && n > 0) return [n, t, false];
     return [DPB/4, '16th', false];
   }
 
@@ -3070,7 +3078,7 @@ function owBuildMusicXml(interpGroups, bankSize, tempo, oneShot = true) {
         if (ALTER[s]) x += `<alter>${ALTER[s]}</alter>`;
         if (oneShot) {
           const cap = Math.min(ev.dur, mE - evDiv);
-          const [sd, st, dot] = snapDur(cap);
+          const [sd, st, dot] = snapDurBasic(cap);
           x += `<octave>${oct}</octave></pitch><duration>${sd}</duration><type>${st}</type>`;
           if (dot) x += `<dot/>`;
           x += `</note>`;
