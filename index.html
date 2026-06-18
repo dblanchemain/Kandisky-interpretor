@@ -2978,20 +2978,28 @@ function owBuildMusicXml(interpGroups, bankSize, tempo, oneShot = true) {
     return s;
   }
 
-  // Pour 1shot=false : découper chaque note à chaque frontière de mesure et annoter les liaisons
-  function splitAtMeasures(evs) {
+  // Pour 1shot=false : décomposer chaque note en segments de valeurs musicales standard (avec liaisons).
+  // Chaque segment a <duration> == <type>×DPB : MuseScore les interprète sans ambiguïté.
+  function expandNotes(evs) {
     const out = [];
     for (const ev of evs) {
-      if (ev.k !== 'n') { out.push({ ...ev, tieStart: false, tieStop: false }); continue; }
-      let rem = ev.dur, d0 = ev.div, first = true;
+      if (ev.k !== 'n') { out.push(ev); continue; }
+      const segs = [];
+      let rem = ev.dur, d0 = ev.div;
       while (rem > 0) {
         const mEnd   = (Math.floor(d0 / DPBar) + 1) * DPBar;
-        const seg    = Math.min(rem, mEnd - d0);
-        const isLast = rem <= mEnd - d0;
-        out.push({ k: 'n', seqIdx: ev.seqIdx, div: d0, dur: seg, midi: ev.midi,
-                   tieStart: !isLast, tieStop: !first });
-        rem -= seg; d0 += seg; first = false;
+        let subRem   = Math.min(rem, mEnd - d0);
+        if (subRem <= 0) { d0 = mEnd; continue; }  // garde-fou
+        while (subRem > 0) {
+          const [n, t, dot] = snapDur(subRem);
+          segs.push({ k: 'n', seqIdx: ev.seqIdx, div: d0,
+                      dur: n, type: t, dot, midi: ev.midi,
+                      tieStart: false, tieStop: segs.length > 0 });
+          d0 += n; subRem -= n; rem -= n;
+        }
       }
+      for (let s = 0; s < segs.length - 1; s++) segs[s].tieStart = true;
+      out.push(...segs);
     }
     return out.sort((a, b) => a.div !== b.div ? a.div - b.div : a.seqIdx - b.seqIdx);
   }
@@ -3033,8 +3041,8 @@ function owBuildMusicXml(interpGroups, bankSize, tempo, oneShot = true) {
     // donc ils apparaissent strictement avant cette note après le tri.
     evs.sort((a, b) => a.div !== b.div ? a.div - b.div : a.seqIdx - b.seqIdx);
 
-    // 1shot=false : pré-découper les notes qui franchissent les frontières de mesure
-    const procEvs = oneShot ? evs : splitAtMeasures(evs);
+    // 1shot=false : décomposer les notes en valeurs standard avec liaisons
+    const procEvs = oneShot ? evs : expandNotes(evs);
 
     x += `<part id="P${i+1}">\n`;
     let ei = 0, pos = 0;
@@ -3057,28 +3065,30 @@ function owBuildMusicXml(interpGroups, bankSize, tempo, oneShot = true) {
           continue;
         }
         if (evDiv > pos) x += fillRests(evDiv - pos);
-        // 1shot=true : snap musical ; 1shot=false : durée exacte du segment (pre-découpé)
-        const cap = oneShot ? Math.min(ev.dur, mE - evDiv) : ev.dur;
-        const [sd, st, dot] = snapDur(cap);
-        const noteDur = oneShot ? sd : cap;
         const s = ev.midi % 12, oct = Math.floor(ev.midi / 12) - 1;
         x += `<note><pitch><step>${STEP[s]}</step>`;
         if (ALTER[s]) x += `<alter>${ALTER[s]}</alter>`;
-        x += `<octave>${oct}</octave></pitch><duration>${noteDur}</duration>`;
-        if (!oneShot && ev.tieStop)  x += `<tie type="stop"/>`;
-        if (!oneShot && ev.tieStart) x += `<tie type="start"/>`;
-        x += `<type>${st}</type>`;
-        if (dot) x += `<dot/>`;
-        // Notations : liaisons + staccato sur la dernière note liée seulement
-        let notations = '';
-        if (!oneShot) {
+        if (oneShot) {
+          const cap = Math.min(ev.dur, mE - evDiv);
+          const [sd, st, dot] = snapDur(cap);
+          x += `<octave>${oct}</octave></pitch><duration>${sd}</duration><type>${st}</type>`;
+          if (dot) x += `<dot/>`;
+          x += `</note>`;
+          pos = evDiv + sd;
+        } else {
+          // ev.dur / ev.type / ev.dot sont issus de expandNotes : <duration> == <type> garanti
+          x += `<octave>${oct}</octave></pitch><duration>${ev.dur}</duration>`;
+          if (ev.tieStop)  x += `<tie type="stop"/>`;
+          if (ev.tieStart) x += `<tie type="start"/>`;
+          x += `<type>${ev.type}</type>`;
+          if (ev.dot) x += `<dot/>`;
+          let notations = '';
           if (ev.tieStop)  notations += `<tied type="stop"/>`;
           if (ev.tieStart) notations += `<tied type="start"/>`;
-          if (!ev.tieStart) notations += `<articulations><staccato placement="above"/></articulations>`;
+          if (notations) x += `<notations>${notations}</notations>`;
+          x += `</note>`;
+          pos = evDiv + ev.dur;
         }
-        if (notations) x += `<notations>${notations}</notations>`;
-        x += `</note>`;
-        pos = evDiv + noteDur;
       }
       if (pos < mE) { x += fillRests(mE - pos); pos = mE; }
       x += `</measure>\n`;
