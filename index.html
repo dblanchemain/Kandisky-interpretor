@@ -718,6 +718,12 @@
                style="width:60px;margin-left:4px;"/>
       </label>
     </div>
+    <div>
+      <label>
+        <input id="midiExportOneShot" type="checkbox" checked style="margin-right:4px;vertical-align:middle;"/>
+        <span style="vertical-align:middle;">1 shot (jouer jusqu'à la fin)</span>
+      </label>
+    </div>
     <div id="midiExportMsg" style="color:#c55;margin-top:6px;font-size:0.82em;min-height:1.2em;"></div>
   </div>
   <div class="ow-popup-foot">
@@ -2681,9 +2687,10 @@ function owExportMidi() {
 }
 
 async function owDoExportMidi() {
-  const n    = parseInt(document.getElementById('midiExportN').value, 10);
-  const k    = parseInt(document.getElementById('midiExportK').value, 10);
-  const poly = parseInt(document.getElementById('midiExportPoly').value, 10) || 8;
+  const n       = parseInt(document.getElementById('midiExportN').value, 10);
+  const k       = parseInt(document.getElementById('midiExportK').value, 10);
+  const poly    = parseInt(document.getElementById('midiExportPoly').value, 10) || 8;
+  const oneshot = document.getElementById('midiExportOneShot').checked;
   const msg  = document.getElementById('midiExportMsg');
   if (!(n >= 1 && n <= 16))       { msg.textContent = 'N doit être entre 1 et 16.'; return; }
   if (!(k >= 1 && k <= 88))       { msg.textContent = 'K doit être entre 1 et 88.'; return; }
@@ -2793,7 +2800,7 @@ async function owDoExportMidi() {
           fadeType: o.fadeType,
           fadeIn:   o.fadeIn,
           fadeOut:  o.fadeOut,
-          oneShot:  true
+          oneShot:  oneshot
         }))
       };
       const jsonStr = new TextEncoder().encode(JSON.stringify(json, null, 2));
@@ -2807,7 +2814,8 @@ async function owDoExportMidi() {
         offsetSec:   o.offsetSec,
         durationSec: o.duree,
         note:        o.note,
-        velocity:    Math.max(1, Math.min(127, Math.round(o.gain * 100)))
+        velocity:    Math.max(1, Math.min(127, Math.round(o.gain * 100))),
+        oneShot:     oneshot
       });
     }
     // Marker bank1 au début pour un redémarrage propre
@@ -2848,7 +2856,7 @@ async function owDoExportMidi() {
 
   // Exporter le MusicXML : notes + repères de bank (lisibles dans MuseScore)
   // On passe k (taille de bank) pour inférer les frontières par indice, pas par temps
-  const _xmlStr = owBuildMusicXml(interpGroups, k, 500000);
+  const _xmlStr = owBuildMusicXml(interpGroups, k, 500000, oneshot);
   if (_xmlStr) await window.api.midiExportSaveFile(folderPath, partName + '_banks.xml', new TextEncoder().encode(_xmlStr));
 
   const numBanks = Math.ceil(filesPerInterp / k);
@@ -2897,8 +2905,9 @@ function owBuildMidiFile(tracks) {
   ];
 
   for (let i = 0; i < tracks.length; i++) {
-    const ch  = i % 16;
-    const raw = [{ tick: 0, bytes: metaStr(0x03, tracks[i].name) }];
+    const ch        = i % 16;
+    const raw       = [{ tick: 0, bytes: metaStr(0x03, tracks[i].name) }];
+    const openNotes = []; // note-offs différés : mode 1shot → émis en fin de piste
     for (const ev of tracks[i].events) {
       if (ev.type === 'marker') {
         raw.push({ tick: secToTicks(ev.offsetSec), bytes: metaStr(0x06, ev.text) });
@@ -2909,13 +2918,18 @@ function owBuildMidiFile(tracks) {
         continue;
       }
       const on  = secToTicks(ev.offsetSec);
-      const off = secToTicks(ev.offsetSec + (ev.durationSec || 0.5));
       const nt  = Math.max(0, Math.min(127, ev.note));
       const vel = Math.max(1, Math.min(127, ev.velocity));
-      raw.push({ tick: on,  bytes: [0x90 | ch, nt, vel] });
-      raw.push({ tick: off, bytes: [0x80 | ch, nt, 0]   });
+      raw.push({ tick: on, bytes: [0x90 | ch, nt, vel] });
+      if (ev.oneShot) {
+        openNotes.push(nt); // note-off reporté en fin de piste
+      } else {
+        const off = secToTicks(ev.offsetSec + (ev.durationSec || 0.5));
+        raw.push({ tick: off, bytes: [0x80 | ch, nt, 0] });
+      }
     }
     const maxTick = raw.reduce((m, e) => Math.max(m, e.tick), 0);
+    for (const nt of openNotes) raw.push({ tick: maxTick, bytes: [0x80 | ch, nt, 0] });
     raw.push({ tick: maxTick, bytes: [0xff, 0x2f, 0x00] });
     const td = buildTrackData(raw);
     chunks.push([0x4d, 0x54, 0x72, 0x6b, ...i32(td.length), ...td]);
@@ -2924,7 +2938,7 @@ function owBuildMidiFile(tracks) {
   return new Uint8Array(chunks.flat()).buffer;
 }
 
-function owBuildMusicXml(interpGroups, bankSize, tempo) {
+function owBuildMusicXml(interpGroups, bankSize, tempo, oneShot = true) {
   const DPB    = 4;
   const DPBar  = 4 * DPB;
   const BPM    = Math.round(60e6 / tempo);
@@ -3012,7 +3026,9 @@ function owBuildMusicXml(interpGroups, bankSize, tempo) {
         const s = ev.midi % 12, oct = Math.floor(ev.midi / 12) - 1;
         x += `<note><pitch><step>${STEP[s]}</step>`;
         if (ALTER[s]) x += `<alter>${ALTER[s]}</alter>`;
-        x += `<octave>${oct}</octave></pitch><duration>${sd}</duration><type>${st}</type></note>`;
+        x += `<octave>${oct}</octave></pitch><duration>${sd}</duration><type>${st}</type>`;
+        if (!oneShot) x += `<notations><articulations><staccato/></articulations></notations>`;
+        x += `</note>`;
         pos = evDiv + sd;
       }
       if (pos < mE) { x += fillRests(mE - pos); pos = mE; }
