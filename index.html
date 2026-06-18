@@ -3008,7 +3008,8 @@ function owBuildMusicXml(interpGroups, bankSize, tempo, oneShot = true) {
       x += `<measure number="${m+1}">`;
       if (m === 0)
         x += `<attributes><divisions>${DPB}</divisions><key><fifths>0</fifths></key><time><beats>4</beats><beat-type>4</beat-type></time><clef><sign>G</sign><line>2</line></clef></attributes>`
-           + `<direction placement="above"><direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>${BPM}</per-minute></metronome></direction-type><sound tempo="${BPM}"/></direction>`;
+           + `<direction placement="above"><direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>${BPM}</per-minute></metronome></direction-type><sound tempo="${BPM}"/></direction>`
+           + `<direction placement="above"><direction-type><words>${oneShot ? '1-shot' : 'note-off'}</words></direction-type></direction>`;
 
       while (ei < evs.length) {
         const ev = evs[ei];
@@ -3027,7 +3028,7 @@ function owBuildMusicXml(interpGroups, bankSize, tempo, oneShot = true) {
         x += `<note><pitch><step>${STEP[s]}</step>`;
         if (ALTER[s]) x += `<alter>${ALTER[s]}</alter>`;
         x += `<octave>${oct}</octave></pitch><duration>${sd}</duration><type>${st}</type>`;
-        if (!oneShot) x += `<notations><articulations><staccato/></articulations></notations>`;
+        if (!oneShot) x += `<notations><articulations><staccato placement="above"/></articulations></notations>`;
         x += `</note>`;
         pos = evDiv + sd;
       }
