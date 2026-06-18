@@ -3024,13 +3024,15 @@ function owBuildMusicXml(interpGroups, bankSize, tempo, oneShot = true) {
         if (evDiv > pos) x += fillRests(evDiv - pos);
         const cap = Math.min(ev.dur, mE - evDiv);
         const [sd, st] = snapDur(cap);
+        // 1shot=false : durée brute (non snappée) pour coller au note-off MIDI exact
+        const noteDur = oneShot ? sd : cap;
         const s = ev.midi % 12, oct = Math.floor(ev.midi / 12) - 1;
         x += `<note><pitch><step>${STEP[s]}</step>`;
         if (ALTER[s]) x += `<alter>${ALTER[s]}</alter>`;
-        x += `<octave>${oct}</octave></pitch><duration>${sd}</duration><type>${st}</type>`;
+        x += `<octave>${oct}</octave></pitch><duration>${noteDur}</duration><type>${st}</type>`;
         if (!oneShot) x += `<notations><articulations><staccato placement="above"/></articulations></notations>`;
         x += `</note>`;
-        pos = evDiv + sd;
+        pos = evDiv + noteDur;
       }
       if (pos < mE) { x += fillRests(mE - pos); pos = mE; }
       x += `</measure>\n`;
