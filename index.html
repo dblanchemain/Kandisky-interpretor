@@ -2939,7 +2939,7 @@ function owBuildMidiFile(tracks) {
 }
 
 function owBuildMusicXml(interpGroups, bankSize, tempo, oneShot = true) {
-  const DPB    = 4;
+  const DPB    = 48;  // 48 divisions/noire ≈ 10ms @120BPM, bien plus proche de la résolution MIDI
   const DPBar  = 4 * DPB;
   const BPM    = Math.round(60e6 / tempo);
   const sSec   = tempo / 1e6 / DPB;
@@ -2949,7 +2949,7 @@ function owBuildMusicXml(interpGroups, bankSize, tempo, oneShot = true) {
   const STEP  = ['C','C','D','D','E','F','F','G','G','A','A','B'];
   const ALTER = [ 0,  1,  0,  1,  0,  0,  1,  0,  1,  0,  1,  0];
 
-  // Avec valeurs pointées — pour expandNotes (1shot=false) et fillRests
+  // Avec valeurs pointées — pour carry-over (1shot=false) et fillRests
   function snapDur(d) {
     for (const [n,t,dot] of [
       [DPBar,      'whole',   false],
@@ -2986,31 +2986,6 @@ function owBuildMusicXml(interpGroups, bankSize, tempo, oneShot = true) {
     return s;
   }
 
-  // Pour 1shot=false : décomposer chaque note en segments de valeurs musicales standard (avec liaisons).
-  // Chaque segment a <duration> == <type>×DPB : MuseScore les interprète sans ambiguïté.
-  function expandNotes(evs) {
-    const out = [];
-    for (const ev of evs) {
-      if (ev.k !== 'n') { out.push(ev); continue; }
-      const segs = [];
-      let rem = ev.dur, d0 = ev.div;
-      while (rem > 0) {
-        const mEnd   = (Math.floor(d0 / DPBar) + 1) * DPBar;
-        let subRem   = Math.min(rem, mEnd - d0);
-        if (subRem <= 0) { d0 = mEnd; continue; }  // garde-fou
-        while (subRem > 0) {
-          const [n, t, dot] = snapDur(subRem);
-          segs.push({ k: 'n', seqIdx: ev.seqIdx, div: d0,
-                      dur: n, type: t, dot, midi: ev.midi,
-                      tieStart: false, tieStop: segs.length > 0 });
-          d0 += n; subRem -= n; rem -= n;
-        }
-      }
-      for (let s = 0; s < segs.length - 1; s++) segs[s].tieStart = true;
-      out.push(...segs);
-    }
-    return out.sort((a, b) => a.div !== b.div ? a.div - b.div : a.seqIdx - b.seqIdx);
-  }
 
   let lastDiv = 0;
   for (const objs of interpGroups)
@@ -3049,11 +3024,12 @@ function owBuildMusicXml(interpGroups, bankSize, tempo, oneShot = true) {
     // donc ils apparaissent strictement avant cette note après le tri.
     evs.sort((a, b) => a.div !== b.div ? a.div - b.div : a.seqIdx - b.seqIdx);
 
-    // 1shot=false : décomposer les notes en valeurs standard avec liaisons
-    const procEvs = oneShot ? evs : expandNotes(evs);
-
     x += `<part id="P${i+1}">\n`;
+
+    // carry-over : { rem, midi } — durée restante d'une note liée qui franchit une mesure (1shot=false)
+    let carryover = [];
     let ei = 0, pos = 0;
+
     for (let m = 0; m < nM; m++) {
       const mS = m * DPBar, mE = mS + DPBar;
       x += `<measure number="${m+1}">`;
@@ -3062,8 +3038,34 @@ function owBuildMusicXml(interpGroups, bankSize, tempo, oneShot = true) {
            + `<direction placement="above"><direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>${BPM}</per-minute></metronome></direction-type><sound tempo="${BPM}"/></direction>`
            + `<direction placement="above"><direction-type><words>${oneShot ? '1-shot' : 'note-off'}</words></direction-type></direction>`;
 
-      while (ei < procEvs.length) {
-        const ev = procEvs[ei];
+      // ── Continuations liées depuis la mesure précédente (1shot=false uniquement) ──
+      if (!oneShot) {
+        const nextCarry = [];
+        for (const co of carryover) {
+          const avail = mE - pos;
+          if (avail <= 0) { nextCarry.push(co); continue; }
+          const [n, t, dot] = snapDur(Math.min(co.rem, avail));
+          const s = co.midi % 12, oct = Math.floor(co.midi / 12) - 1;
+          x += `<note><pitch><step>${STEP[s]}</step>`;
+          if (ALTER[s]) x += `<alter>${ALTER[s]}</alter>`;
+          x += `<octave>${oct}</octave></pitch><duration>${n}</duration>`;
+          x += `<tie type="stop"/>`;
+          if (co.rem > n) x += `<tie type="start"/>`;
+          x += `<type>${t}</type>`;
+          if (dot) x += `<dot/>`;
+          let not = `<tied type="stop"/>`;
+          if (co.rem > n) not += `<tied type="start"/>`;
+          x += `<notations>${not}</notations></note>`;
+          pos += n;
+          co.rem -= n;
+          if (co.rem > 0) nextCarry.push(co);
+        }
+        carryover = nextCarry;
+      }
+
+      // ── Événements de la mesure ──
+      while (ei < evs.length) {
+        const ev = evs[ei];
         const evDiv = Math.max(ev.div, pos);
         if (evDiv >= mE) break;
         ei++;
@@ -3073,29 +3075,27 @@ function owBuildMusicXml(interpGroups, bankSize, tempo, oneShot = true) {
           continue;
         }
         if (evDiv > pos) x += fillRests(evDiv - pos);
+        const cap = Math.min(ev.dur, mE - evDiv);
         const s = ev.midi % 12, oct = Math.floor(ev.midi / 12) - 1;
         x += `<note><pitch><step>${STEP[s]}</step>`;
         if (ALTER[s]) x += `<alter>${ALTER[s]}</alter>`;
         if (oneShot) {
-          const cap = Math.min(ev.dur, mE - evDiv);
           const [sd, st, dot] = snapDurBasic(cap);
           x += `<octave>${oct}</octave></pitch><duration>${sd}</duration><type>${st}</type>`;
           if (dot) x += `<dot/>`;
           x += `</note>`;
           pos = evDiv + sd;
         } else {
-          // ev.dur / ev.type / ev.dot sont issus de expandNotes : <duration> == <type> garanti
-          x += `<octave>${oct}</octave></pitch><duration>${ev.dur}</duration>`;
-          if (ev.tieStop)  x += `<tie type="stop"/>`;
-          if (ev.tieStart) x += `<tie type="start"/>`;
-          x += `<type>${ev.type}</type>`;
-          if (ev.dot) x += `<dot/>`;
-          let notations = '';
-          if (ev.tieStop)  notations += `<tied type="stop"/>`;
-          if (ev.tieStart) notations += `<tied type="start"/>`;
-          if (notations) x += `<notations>${notations}</notations>`;
+          const [n, t, dot] = snapDur(cap);
+          const hasMore = ev.dur > n;
+          x += `<octave>${oct}</octave></pitch><duration>${n}</duration>`;
+          if (hasMore) x += `<tie type="start"/>`;
+          x += `<type>${t}</type>`;
+          if (dot) x += `<dot/>`;
+          if (hasMore) x += `<notations><tied type="start"/></notations>`;
           x += `</note>`;
-          pos = evDiv + ev.dur;
+          pos = evDiv + n;
+          if (hasMore) carryover.push({ rem: ev.dur - n, midi: ev.midi });
         }
       }
       if (pos < mE) { x += fillRests(mE - pos); pos = mE; }
